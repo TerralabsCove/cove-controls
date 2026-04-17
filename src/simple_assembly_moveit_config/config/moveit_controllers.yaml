@@ -1,0 +1,26 @@
+# MoveIt uses this configuration for controller management
+
+trajectory_execution:
+  allowed_execution_duration_scaling: 2.0   # allow moves to take 2x longer than planned before timeout
+  allowed_goal_duration_margin: 1.0         # extra seconds of grace before declaring failure
+  allowed_start_tolerance: 0.0              # disabled — mock hardware may have small drift
+  execution_duration_monitoring: false      # don't abort if move takes longer than expected
+
+moveit_controller_manager: moveit_simple_controller_manager/MoveItSimpleControllerManager
+
+moveit_simple_controller_manager:
+  controller_names:
+    - arm_controller
+
+  arm_controller:
+    type: FollowJointTrajectory
+    action_ns: follow_joint_trajectory
+    default: true
+    joints:
+      - revolute_1_0
+      - revolute_2_0
+      - revolute_3_0
+      - revolute_4_0
+      - revolute_5_0
+      - revolute_6_0
+      - revolute_7_0

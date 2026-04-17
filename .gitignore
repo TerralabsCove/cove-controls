@@ -1,0 +1,10 @@
+build/
+install/
+log/
+.DS_Store
+__pycache__/
+*.pyc
+*.pyo
+*.tar.gz
+*.swp
+*.swo

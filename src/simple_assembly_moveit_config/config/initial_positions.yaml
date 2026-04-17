@@ -1,0 +1,9 @@
+# Default initial positions for simple_assembly's ros2_control fake system
+
+initial_positions:
+  revolute_1_0: 0
+  revolute_2_0: 0
+  revolute_3_0: 0
+  revolute_4_0: 0
+  revolute_5_0: 0
+  revolute_6_0: 0

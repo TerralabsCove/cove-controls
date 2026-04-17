@@ -1,0 +1,25 @@
+moveit_setup_assistant_config:
+  urdf:
+    package: simple_assembly
+    relative_path: urdf/simple_assembly.urdf
+  srdf:
+    relative_path: config/simple_assembly.srdf
+  package_settings:
+    author_name: Samuel_Burnd
+    author_email: samuel.b.burns@gmail.com
+    generated_timestamp: 1775357994
+  control_xacro:
+    command:
+      - position
+    state:
+      - position
+      - velocity
+  modified_urdf:
+    xacros:
+      - control_xacro
+  control_xacro:
+    command:
+      - position
+    state:
+      - position
+      - velocity

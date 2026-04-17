@@ -1,0 +1,178 @@
+<?xml version="1.0"?>
+<robot name="simple_turret" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- =====================================================================
+       CONFIGURABLE LIMITS — tweak these as needed
+       All angles in radians. 1 rad = 57.3 degrees.
+       ===================================================================== -->
+
+  <!-- Pan (bottom, Z axis): full 360° rotation -->
+  <xacro:property name="pan_limit"     value="3.14159"/>  <!-- ±180° = full 360 range -->
+  <xacro:property name="pan_vel"       value="10.0"/>     <!-- rad/s -->
+  <xacro:property name="pan_effort"    value="28.0"/>     <!-- Nm (DM4340 max) -->
+
+  <!-- Tilt (top, Y axis): ±180° -->
+  <xacro:property name="tilt_limit"    value="3.14159"/>  <!-- ±180° -->
+  <xacro:property name="tilt_vel"      value="20.0"/>     <!-- rad/s -->
+  <xacro:property name="tilt_effort"   value="200.0"/>    <!-- Nm (DM10010 max) -->
+
+  <!-- ros2_control hardware parameters -->
+  <xacro:property name="serial_port"   value="/dev/ttyACM0"/>
+  <xacro:property name="baud_rate"     value="921600"/>
+  <xacro:property name="control_mode"  value="pos_vel"/>
+  <xacro:property name="pan_type"      value="DM4340"/>
+  <xacro:property name="pan_slave_id"  value="0x02"/>
+  <xacro:property name="pan_master_id" value="0x12"/>
+  <xacro:property name="tilt_type"     value="DM10010"/>
+  <xacro:property name="tilt_slave_id" value="0x01"/>
+  <xacro:property name="tilt_master_id" value="0x11"/>
+
+  <!-- ===================================================================== -->
+
+  <link name="part_1">
+    <inertial>
+      <mass value="1.49866"/>
+      <origin xyz="1.61912e-18 -8.98462e-20 0.028166" rpy="0 0 0"/>
+      <inertia ixx="0.0015335" ixy="0" ixz="0" iyy="0.0015335" iyz="0" izz="0.00224985"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://simple_turret/meshes/Part 1.stl" scale="1 1 1"/>
+      </geometry>
+      <material name="silver">
+        <color rgba="0.901961 0.878431 0.811765 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://simple_turret/meshes/Part 1.stl" scale="1 1 1"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="part_1_1">
+    <inertial>
+      <mass value="0.392289"/>
+      <origin xyz="0 0 -0.02825" rpy="0 0 0"/>
+      <inertia ixx="0.000184016" ixy="0" ixz="0" iyy="0.000184016" iyz="0" izz="0.000159318"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 -0.0565" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://simple_turret/meshes/Part 1_1.stl" scale="1 1 1"/>
+      </geometry>
+      <material name="grey">
+        <color rgba="0.8 0.776471 0.713726 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 -0.0565" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://simple_turret/meshes/Part 1_1.stl" scale="1 1 1"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="part_1_2">
+    <inertial>
+      <mass value="0.000105555"/>
+      <origin xyz="-0.0242053 0 0.0325355" rpy="0 0 0"/>
+      <inertia ixx="1.30623e-07" ixy="0" ixz="2.82613e-08" iyy="1.28931e-07" iyz="0" izz="6.53473e-08"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 -0.004" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://simple_turret/meshes/Part 1_2.stl" scale="1 1 1"/>
+      </geometry>
+      <material name="blue">
+        <color rgba="0.615686 0.811765 0.929412 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 -0.004" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://simple_turret/meshes/Part 1_2.stl" scale="1 1 1"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="root"/>
+
+  <!-- Fixed base -->
+  <joint name="fastened_1_0" type="fixed">
+    <origin xyz="0 0 0" rpy="3.14159 0 0"/>
+    <parent link="root"/>
+    <child link="part_1_1"/>
+  </joint>
+
+  <!-- Pan: bottom joint, rotates around Z axis -->
+  <joint name="pan" type="revolute">
+    <origin xyz="0 0 -0.0565" rpy="3.14159 0 0"/>
+    <axis xyz="0 0 -1"/>
+    <parent link="part_1_1"/>
+    <child link="part_1_2"/>
+    <limit lower="-${pan_limit}" upper="${pan_limit}"
+           velocity="${pan_vel}" effort="${pan_effort}"/>
+    <dynamics damping="0.1" friction="0.1"/>
+  </joint>
+
+  <!-- Tilt: top joint, rotates around Y axis -->
+  <joint name="tilt" type="revolute">
+    <origin xyz="-0.0273 0 0.0729055" rpy="1.5708 -1.48511 1.5708"/>
+    <axis xyz="0 0 -1"/>
+    <parent link="part_1_2"/>
+    <child link="part_1"/>
+    <limit lower="-${tilt_limit}" upper="${tilt_limit}"
+           velocity="${tilt_vel}" effort="${tilt_effort}"/>
+    <dynamics damping="0.1" friction="0.1"/>
+  </joint>
+
+  <!-- =====================================================================
+       ros2_control — hardware interface wiring
+       ===================================================================== -->
+  <ros2_control name="damiao_system" type="system">
+    <hardware>
+      <plugin>damiao_driver/DamiaoHardwareInterface</plugin>
+      <param name="serial_port">${serial_port}</param>
+      <param name="baud_rate">${baud_rate}</param>
+      <param name="control_mode">${control_mode}</param>
+    </hardware>
+
+    <joint name="pan">
+      <param name="motor_type">${pan_type}</param>
+      <param name="slave_id">${pan_slave_id}</param>
+      <param name="master_id">${pan_master_id}</param>
+      <command_interface name="position">
+        <param name="min">-${pan_limit}</param>
+        <param name="max">${pan_limit}</param>
+      </command_interface>
+      <command_interface name="velocity">
+        <param name="min">-${pan_vel}</param>
+        <param name="max">${pan_vel}</param>
+      </command_interface>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+      <state_interface name="effort"/>
+    </joint>
+
+    <joint name="tilt">
+      <param name="motor_type">${tilt_type}</param>
+      <param name="slave_id">${tilt_slave_id}</param>
+      <param name="master_id">${tilt_master_id}</param>
+      <command_interface name="position">
+        <param name="min">-${tilt_limit}</param>
+        <param name="max">${tilt_limit}</param>
+      </command_interface>
+      <command_interface name="velocity">
+        <param name="min">-${tilt_vel}</param>
+        <param name="max">${tilt_vel}</param>
+      </command_interface>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+      <state_interface name="effort"/>
+    </joint>
+  </ros2_control>
+
+</robot>

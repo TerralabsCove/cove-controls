@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<robot name="simple_assembly">
+    <group name="arm">
+        <joint name="revolute_1_0"/>
+        <joint name="revolute_2_0"/>
+        <joint name="revolute_3_0"/>
+        <joint name="revolute_4_0"/>
+        <joint name="revolute_5_0"/>
+        <joint name="revolute_6_0"/>
+        <joint name="revolute_7_0"/>
+    </group>
+    <group_state name="home" group="arm">
+        <joint name="revolute_1_0" value="0"/>
+        <joint name="revolute_2_0" value="0"/>
+        <joint name="revolute_3_0" value="0"/>
+        <joint name="revolute_4_0" value="0"/>
+        <joint name="revolute_5_0" value="0"/>
+        <joint name="revolute_6_0" value="0"/>
+        <joint name="revolute_7_0" value="0"/>
+    </group_state>
+    <group_state name="ready" group="arm">
+        <joint name="revolute_1_0" value="0"/>
+        <joint name="revolute_2_0" value="-1.5"/>
+        <joint name="revolute_3_0" value="0.0521"/>
+        <joint name="revolute_4_0" value="-0.2015"/>
+        <joint name="revolute_5_0" value="-0.4339"/>
+        <joint name="revolute_6_0" value="0.5834"/>
+        <joint name="revolute_7_0" value="0"/>
+    </group_state>
+    <group_state name="pickup" group="arm">
+        <joint name="revolute_1_0" value="0"/>
+        <joint name="revolute_2_0" value="-1.0"/>
+        <joint name="revolute_3_0" value="0.5"/>
+        <joint name="revolute_4_0" value="-0.8"/>
+        <joint name="revolute_5_0" value="0"/>
+        <joint name="revolute_6_0" value="0"/>
+        <joint name="revolute_7_0" value="0"/>
+    </group_state>
+    <end_effector name="wrist" parent_link="wrist_link" group="arm"/>
+</robot>

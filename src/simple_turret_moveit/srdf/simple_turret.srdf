@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<robot name="simple_turret">
+
+  <!-- Planning group: the 2-DOF turret chain -->
+  <group name="turret">
+    <chain base_link="root" tip_link="turret_tip" />
+  </group>
+
+  <!-- Named poses -->
+  <group_state name="home" group="turret">
+    <joint name="pan"  value="0.0" />
+    <joint name="tilt" value="0.0" />
+  </group_state>
+
+  <!-- Disable collision between adjacent links -->
+  <disable_collisions link1="part_1_1" link2="part_1_2" reason="Adjacent" />
+  <disable_collisions link1="part_1_2" link2="part_1"   reason="Adjacent" />
+  <disable_collisions link1="part_1_1" link2="part_1"   reason="Never" />
+
+</robot>

@@ -1,0 +1,10 @@
+<library path="damiao_hardware_interface">
+  <class name="damiao_driver/DamiaoHardwareInterface"
+         type="damiao_driver::DamiaoHardwareInterface"
+         base_class_type="hardware_interface::SystemInterface">
+    <description>
+      Hardware interface plugin for Damiao serial actuators.
+      Supports pos_vel, velocity, and MIT control modes.
+    </description>
+  </class>
+</library>

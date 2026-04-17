@@ -1,0 +1,5 @@
+# Default initial positions for simple_turret's ros2_control fake system
+
+initial_positions:
+  pan: 0
+  tilt: 0
