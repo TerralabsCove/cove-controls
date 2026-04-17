@@ -1,0 +1,12 @@
+/camera/usb_cam:
+  ros__parameters:
+    video_device: "/dev/video0"
+    io_method: "mmap"
+    pixel_format: "yuyv"
+    camera_name: "camera"
+    camera_frame_id: "camera"
+    camera_info_url: ""
+    camera_transport_suffix: "image_raw"
+    image_width: 640
+    image_height: 480
+    framerate: 30.0

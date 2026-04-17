@@ -4,8 +4,10 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 URDF_PATH="$REPO_ROOT/install/simple_turret/share/simple_turret/urdf/simple_turret.urdf"
 
+set +u
 source /opt/ros/jazzy/setup.bash
 source "$REPO_ROOT/install/setup.bash"
+set -u
 
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 export CYCLONEDDS_URI="file://$REPO_ROOT/config/pi/cyclonedds.xml"

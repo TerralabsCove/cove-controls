@@ -21,8 +21,10 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
+set +u
 source "/opt/ros/$ROS_DISTRO/setup.bash"
 source "$REPO_ROOT/install/setup.bash"
+set -u
 
 export ROS_DOMAIN_ID
 export CYCLONEDDS_URI="file://$REPO_ROOT/config/pi/cyclonedds_network.xml"
