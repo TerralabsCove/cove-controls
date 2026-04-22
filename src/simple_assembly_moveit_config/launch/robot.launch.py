@@ -53,4 +53,12 @@ def generate_launch_description():
         )
     )
 
+    ld.add_action(
+        Node(
+            package="cove_kiosk_bridge",
+            executable="kiosk_bridge",
+            output="screen",
+        )
+    )
+
     return ld

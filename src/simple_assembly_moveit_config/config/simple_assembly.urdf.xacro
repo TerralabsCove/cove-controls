@@ -1,5 +1,6 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="simple_assembly">
+    <xacro:arg name="use_fake_hardware" default="false" />
 
     <!-- Import simple_assembly urdf file -->
     <xacro:include filename="$(find simple_assembly)/urdf/simple_assembly.urdf" />
@@ -7,6 +8,9 @@
     <!-- Import control_xacro -->
     <xacro:include filename="simple_assembly.ros2_control.xacro" />
 
-    <xacro:simple_assembly_ros2_control name="DamiaoArm"/>
+    <xacro:simple_assembly_ros2_control
+        name="DamiaoArm"
+        use_fake_hardware="$(arg use_fake_hardware)"
+    />
 
 </robot>
