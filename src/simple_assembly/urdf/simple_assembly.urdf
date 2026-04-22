@@ -312,60 +312,60 @@
         <parent link="part_1_10" />
         <child link="part_1_8" />
     </joint>
-    <!-- revolute_1_0: Z-type (DM10010), base joint — spins around arm axis -->
+    <!-- revolute_1_0: Z-type (DM10010), base joint — +/-360 deg from home -->
     <joint name="revolute_1_0" type="revolute">
         <origin xyz="0 0 0.0565" rpy="0 0 0" />
         <axis xyz="0 0 1" />
         <parent link="part_1_12" />
         <child link="part_1_13" />
-        <limit lower="-1.9199" upper="1.9199" effort="150.0" velocity="15.71" />
+        <limit lower="-6.28318" upper="6.28318" effort="150.0" velocity="15.71" />
     </joint>
-    <!-- revolute_2_0: Y-type (DM4340) — bends around Y axis -->
+    <!-- revolute_2_0: first Y-type (DM4340) from bottom — +/-90 deg from home -->
     <joint name="revolute_2_0" type="revolute">
         <origin xyz="0 0 0.0815" rpy="0 0 0" />
         <axis xyz="0 1 0" />
         <parent link="part_1_13" />
         <child link="part_1_7" />
-        <limit lower="-3.14159" upper="3.14159" effort="27.0" velocity="5.45" />
+        <limit lower="-1.5708" upper="1.5708" effort="27.0" velocity="5.45" />
     </joint>
-    <!-- revolute_3_0: Z-type (DM10010) — spins around arm axis -->
+    <!-- revolute_3_0: Z-type (DM10010) — +/-360 deg from home -->
     <joint name="revolute_3_0" type="revolute">
         <origin xyz="0 0 0.0565" rpy="0 0 0" />
         <axis xyz="0 0 1" />
         <parent link="part_1_14" />
         <child link="part_1_9" />
-        <limit lower="-1.9199" upper="1.9199" effort="150.0" velocity="15.71" />
+        <limit lower="-6.28318" upper="6.28318" effort="150.0" velocity="15.71" />
     </joint>
-    <!-- revolute_4_0: Y-type (DM4340) — bends around Y axis -->
+    <!-- revolute_4_0: Y-type (DM4340) — +/-110 deg from home -->
     <joint name="revolute_4_0" type="revolute">
         <origin xyz="0 0 0.0815" rpy="0 0 0" />
         <axis xyz="0 1 0" />
         <parent link="part_1_11" />
         <child link="part_1_2" />
-        <limit lower="-3.14159" upper="3.14159" effort="27.0" velocity="5.45" />
+        <limit lower="-1.91986" upper="1.91986" effort="27.0" velocity="5.45" />
     </joint>
-    <!-- revolute_5_0: Z-type (DM10010) — spins around arm axis -->
+    <!-- revolute_5_0: Z-type (DM10010) — +/-360 deg from home -->
     <joint name="revolute_5_0" type="revolute">
         <origin xyz="0 0 0.0565" rpy="0 0 0" />
         <axis xyz="0 0 1" />
         <parent link="part_1" />
         <child link="part_1_5" />
-        <limit lower="-1.9199" upper="1.9199" effort="150.0" velocity="15.71" />
+        <limit lower="-6.28318" upper="6.28318" effort="150.0" velocity="15.71" />
     </joint>
-    <!-- revolute_6_0: Y-type (DM4340) — bends around Y axis -->
+    <!-- revolute_6_0: Y-type (DM4340) — +/-110 deg from home -->
     <joint name="revolute_6_0" type="revolute">
         <origin xyz="0 0 0.0815" rpy="0 0 0" />
         <axis xyz="0 1 0" />
         <parent link="part_1_4" />
         <child link="part_1_3" />
-        <limit lower="-3.14159" upper="3.14159" effort="27.0" velocity="5.45" />
+        <limit lower="-1.91986" upper="1.91986" effort="27.0" velocity="5.45" />
     </joint>
-    <!-- revolute_7_0: Z-type (DM10010), wrist/tip — spins around arm axis -->
+    <!-- revolute_7_0: Z-type (DM10010), wrist/tip — +/-360 deg from home -->
     <joint name="revolute_7_0" type="revolute">
         <origin xyz="0 0 0" rpy="0 0 0" />
         <axis xyz="0 0 1" />
         <parent link="part_1_8" />
         <child link="wrist_link" />
-        <limit lower="-1.9199" upper="1.9199" effort="150.0" velocity="15.71" />
+        <limit lower="-6.28318" upper="6.28318" effort="150.0" velocity="15.71" />
     </joint>
 </robot>

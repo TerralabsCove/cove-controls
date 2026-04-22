@@ -1,0 +1,18 @@
+moveit_setup_assistant_config:
+  urdf:
+    package: simple_assembly_tracking_moveit_config
+    relative_path: config/simple_assembly_tracking.urdf.xacro
+  srdf:
+    relative_path: config/simple_assembly_tracking.srdf
+  package_settings:
+    author_name: user
+    author_email: user@example.com
+  control_xacro:
+    command:
+      - position
+    state:
+      - position
+      - velocity
+  modified_urdf:
+    xacros:
+      - control_xacro

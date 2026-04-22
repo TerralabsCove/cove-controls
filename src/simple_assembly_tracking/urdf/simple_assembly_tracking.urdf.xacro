@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="simple_assembly_tracking">
+
+    <xacro:include filename="$(find simple_assembly)/urdf/simple_assembly.urdf" />
+
+    <link name="camera_link">
+        <visual>
+            <geometry>
+                <box size="0.04 0.08 0.03"/>
+            </geometry>
+            <material name="camera_black">
+                <color rgba="0.1 0.1 0.1 1"/>
+            </material>
+        </visual>
+    </link>
+
+    <joint name="camera_joint" type="fixed">
+        <parent link="root"/>
+        <child link="camera_link"/>
+        <origin xyz="0.4 0.0 0.3" rpy="0 0.5236 0"/>
+    </joint>
+
+    <link name="camera_optical_frame"/>
+
+    <joint name="camera_optical_joint" type="fixed">
+        <parent link="camera_link"/>
+        <child link="camera_optical_frame"/>
+        <origin xyz="0 0 0" rpy="-1.5708 0 -1.5708"/>
+    </joint>
+
+</robot>

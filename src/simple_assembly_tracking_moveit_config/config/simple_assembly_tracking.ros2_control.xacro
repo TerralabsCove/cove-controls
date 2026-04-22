@@ -1,0 +1,99 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+    <xacro:macro name="simple_assembly_tracking_ros2_control" params="name">
+
+        <ros2_control name="${name}" type="system">
+            <hardware>
+                <plugin>damiao_driver/DamiaoHardwareInterface</plugin>
+                <param name="serial_port">/dev/ttyACM0</param>
+                <param name="baud_rate">921600</param>
+                <param name="control_mode">position</param>
+            </hardware>
+
+            <!-- Joint 1 (base): Z-type DM10010, physical top-to-bottom index 7 -->
+            <joint name="revolute_1_0">
+                <param name="motor_type">DM10010</param>
+                <param name="slave_id">0x03</param>
+                <param name="master_id">0x13</param>
+                <command_interface name="position"/>
+                <command_interface name="velocity"/>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+                <state_interface name="effort"/>
+            </joint>
+
+            <!-- Joint 2: Y-type DM4340, physical top-to-bottom index 6 -->
+            <joint name="revolute_2_0">
+                <param name="motor_type">DM4340</param>
+                <param name="slave_id">0x04</param>
+                <param name="master_id">0x14</param>
+                <command_interface name="position"/>
+                <command_interface name="velocity"/>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+                <state_interface name="effort"/>
+            </joint>
+
+            <!-- Joint 3: Z-type DM10010, physical top-to-bottom index 5 -->
+            <joint name="revolute_3_0">
+                <param name="motor_type">DM10010</param>
+                <param name="slave_id">0x07</param>
+                <param name="master_id">0x17</param>
+                <command_interface name="position"/>
+                <command_interface name="velocity"/>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+                <state_interface name="effort"/>
+            </joint>
+
+            <!-- Joint 4: Y-type DM4340, physical top-to-bottom index 4 -->
+            <joint name="revolute_4_0">
+                <param name="motor_type">DM4340</param>
+                <param name="slave_id">0x06</param>
+                <param name="master_id">0x16</param>
+                <command_interface name="position"/>
+                <command_interface name="velocity"/>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+                <state_interface name="effort"/>
+            </joint>
+
+            <!-- Joint 5: Z-type DM10010, physical top-to-bottom index 3 -->
+            <joint name="revolute_5_0">
+                <param name="motor_type">DM10010</param>
+                <param name="slave_id">0x05</param>
+                <param name="master_id">0x15</param>
+                <command_interface name="position"/>
+                <command_interface name="velocity"/>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+                <state_interface name="effort"/>
+            </joint>
+
+            <!-- Joint 6: Y-type DM4340, physical top-to-bottom index 2 -->
+            <joint name="revolute_6_0">
+                <param name="motor_type">DM4340</param>
+                <param name="slave_id">0x02</param>
+                <param name="master_id">0x12</param>
+                <command_interface name="position"/>
+                <command_interface name="velocity"/>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+                <state_interface name="effort"/>
+            </joint>
+
+            <!-- Joint 7 (wrist/tip): Z-type DM10010, physical top-to-bottom index 1 -->
+            <joint name="revolute_7_0">
+                <param name="motor_type">DM10010</param>
+                <param name="slave_id">0x01</param>
+                <param name="master_id">0x11</param>
+                <command_interface name="position"/>
+                <command_interface name="velocity"/>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+                <state_interface name="effort"/>
+            </joint>
+
+        </ros2_control>
+    </xacro:macro>
+</robot>

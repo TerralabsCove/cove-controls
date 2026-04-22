@@ -81,6 +81,83 @@ At minimum, set:
 - the local interface address or interface name for the machine running that file
 - the peer address for the opposite machine
 
+## Tailscale SSH And Routing
+
+Known-good Pi targets from the current setup:
+
+- LAN SSH fallback: `terralabscove@10.66.10.30`
+- Pi Tailscale IP: `100.88.175.52`
+- Ubuntu VM Tailscale IP: `100.86.104.75`
+
+If Tailscale SSH or normal SSH to the Pi Tailscale IP times out, first verify whether Linux is routing the Pi Tailscale IP through `tailscale0`:
+
+```bash
+ip -brief addr show tailscale0
+ip route get 100.88.175.52
+```
+
+Healthy output should show `tailscale0` with the Ubuntu VM's `100.x` address and the route to `100.88.175.52` using `tailscale0`. If the route instead goes through the normal network interface, such as `enp0s5` via `10.211.55.1`, the local Tailscale kernel route state is stale. In that broken state, Tailscale control-plane pings may still work, but TCP/SSH to `100.88.175.52:22` can time out.
+
+Immediate recovery on the Ubuntu VM:
+
+```bash
+sudo systemctl restart tailscaled
+sudo tailscale up --timeout 5s
+ip -brief addr show tailscale0
+ip route get 100.88.175.52
+```
+
+The LAN path can be used while Tailscale routing is broken:
+
+```bash
+sshpass -p terralabscove ssh -o StrictHostKeyChecking=no terralabscove@10.66.10.30
+```
+
+The Pi should use normal OpenSSH for this setup. Keep Tailscale SSH disabled on the Pi so `ssh terralabscove@100.88.175.52` goes directly to `sshd` and does not trigger the Tailscale browser re-auth check:
+
+```bash
+sshpass -p terralabscove ssh -o StrictHostKeyChecking=no terralabscove@10.66.10.30 \
+  "echo 'terralabscove' | sudo -S tailscale set --ssh=false"
+```
+
+If Tailscale SSH is intentionally enabled later, the browser prompt is controlled by the tailnet SSH access policy. Use an `accept` rule instead of a `check` rule in the Tailscale admin console to avoid the extra web authentication step.
+
+For a more permanent fix, make sure the local Tailscale daemon is enabled at boot and let the current user operate Tailscale without sudo:
+
+```bash
+sudo systemctl enable --now tailscaled
+sudo tailscale set --operator=$USER
+```
+
+If the VM still loses the `tailscale0` IPv4 address or the `100.64.0.0/10` route after Wi-Fi changes, VM suspend/resume, or campus network transitions, add a small NetworkManager dispatcher hook on the Ubuntu VM to restart Tailscale whenever the primary interface comes back up:
+
+```bash
+sudo tee /etc/NetworkManager/dispatcher.d/90-restart-tailscale >/dev/null <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+IFACE="$1"
+STATE="$2"
+
+case "$STATE" in
+  up|connectivity-change)
+    if [[ "$IFACE" == "enp0s5" ]]; then
+      systemctl restart tailscaled
+    fi
+    ;;
+esac
+EOF
+sudo chmod +x /etc/NetworkManager/dispatcher.d/90-restart-tailscale
+```
+
+After installing the hook, unplug/reconnect the network or run `sudo systemctl restart NetworkManager`, then re-check:
+
+```bash
+ip -brief addr show tailscale0
+ip route get 100.88.175.52
+sshpass -p terralabscove ssh -o StrictHostKeyChecking=no terralabscove@100.88.175.52 true
+```
+
 ## Launch
 
 ### 7-DOF Arm
