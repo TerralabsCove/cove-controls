@@ -23,10 +23,13 @@ def generate_launch_description():
     ld = LaunchDescription()
 
     ld.add_action(DeclareLaunchArgument("video_device", default_value="/dev/video0"))
+    ld.add_action(DeclareLaunchArgument("camera_frame_id", default_value="camera_optical_frame"))
     ld.add_action(DeclareLaunchArgument("tag_size", default_value="0.162"))
     ld.add_action(DeclareLaunchArgument("tag_id", default_value="0"))
     ld.add_action(DeclareLaunchArgument("kp_pan", default_value="0.0015"))
     ld.add_action(DeclareLaunchArgument("kp_tilt", default_value="0.0015"))
+    ld.add_action(DeclareLaunchArgument("pan_sign", default_value="-1.0"))
+    ld.add_action(DeclareLaunchArgument("tilt_sign", default_value="-1.0"))
     ld.add_action(DeclareLaunchArgument("deadband_px", default_value="25.0"))
     ld.add_action(DeclareLaunchArgument("trajectory_duration", default_value="0.15"))
 
@@ -76,7 +79,10 @@ def generate_launch_description():
             output="screen",
             parameters=[
                 camera_params,
-                {"video_device": LaunchConfiguration("video_device")},
+                {
+                    "video_device": LaunchConfiguration("video_device"),
+                    "camera_frame_id": LaunchConfiguration("camera_frame_id"),
+                },
             ],
         )
     )
@@ -119,6 +125,12 @@ def generate_launch_description():
                     ),
                     "kp_tilt": ParameterValue(
                         LaunchConfiguration("kp_tilt"), value_type=float
+                    ),
+                    "pan_sign": ParameterValue(
+                        LaunchConfiguration("pan_sign"), value_type=float
+                    ),
+                    "tilt_sign": ParameterValue(
+                        LaunchConfiguration("tilt_sign"), value_type=float
                     ),
                     "deadband_px": ParameterValue(
                         LaunchConfiguration("deadband_px"), value_type=float
