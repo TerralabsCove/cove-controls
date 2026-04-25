@@ -24,7 +24,9 @@ ros2 launch simple_assembly_moveit_config moveit_rviz.launch.py \
   "$@" &
 rviz_pid=$!
 
-ros2 run rqt_image_view rqt_image_view /camera/image_raw &
+ros2 run image_view image_view --ros-args \
+  -p image:=/camera/image_raw \
+  -p image_transport:=compressed &
 image_pid=$!
 
 wait "$rviz_pid" "$image_pid"

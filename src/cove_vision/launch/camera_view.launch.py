@@ -9,11 +9,16 @@ def generate_launch_description():
         [
             DeclareLaunchArgument("image_topic", default_value="/camera/image_raw"),
             Node(
-                package="rqt_image_view",
-                executable="rqt_image_view",
+                package="image_view",
+                executable="image_view",
                 name="camera_view",
                 output="screen",
-                arguments=[LaunchConfiguration("image_topic")],
+                parameters=[
+                    {
+                        "image": LaunchConfiguration("image_topic"),
+                        "image_transport": "compressed",
+                    }
+                ],
             ),
         ]
     )
