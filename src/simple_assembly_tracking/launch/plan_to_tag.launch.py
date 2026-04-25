@@ -1,5 +1,5 @@
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription, TimerAction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
@@ -35,6 +35,22 @@ def generate_launch_description():
                     "tag_id": LaunchConfiguration("tag_id"),
                     "enable_tracker": "false",
                 }.items(),
+            ),
+            TimerAction(
+                period=3.0,
+                actions=[
+                    ExecuteProcess(
+                        cmd=[
+                            "ros2",
+                            "service",
+                            "call",
+                            "/camera/set_capture",
+                            "std_srvs/srv/SetBool",
+                            "{data: true}",
+                        ],
+                        output="screen",
+                    )
+                ],
             ),
             Node(
                 package="simple_assembly_tracking",
