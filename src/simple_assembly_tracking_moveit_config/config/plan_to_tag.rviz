@@ -6,6 +6,7 @@ Panels:
         - /MotionPlanning1
         - /RobotModel1
         - /AprilTag Marker1
+        - /Captured Tag1
         - /Plan Goal1
         - /Plan Button1
   - Class: rviz_common/Help
@@ -41,6 +42,11 @@ Visualization Manager:
       Name: AprilTag Marker
       Topic:
         Value: /apriltag/tag_marker
+      Value: true
+    - Class: rviz_default_plugins/Marker
+      Name: Captured Tag
+      Topic:
+        Value: /apriltag/captured_tag_marker
       Value: true
     - Class: rviz_default_plugins/Marker
       Name: Plan Goal

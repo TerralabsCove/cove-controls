@@ -38,6 +38,7 @@ class PlanToTag(Node):
         self.approach_distance = float(
             self.declare_parameter("approach_distance", 0.20).value
         )
+        self.tag_size = float(self.declare_parameter("tag_size", 0.162).value)
         self.goal_tolerance = float(
             self.declare_parameter("goal_tolerance", 0.04).value
         )
@@ -68,40 +69,77 @@ class PlanToTag(Node):
         self.goal_marker_pub = self.create_publisher(
             Marker, "/apriltag/plan_goal_marker", 10
         )
+        self.captured_marker_pub = self.create_publisher(
+            Marker, "/apriltag/captured_tag_marker", 10
+        )
+        self.captured_tag_pose = None
+        self.captured_target_pose = None
+        self.captured_range = None
+
         self.create_subscription(Empty, "/apriltag/plan_to_tag", self.on_trigger, 10)
+        self.create_subscription(Empty, "/apriltag/capture_tag", self.on_capture, 10)
+        self.create_subscription(
+            Empty, "/apriltag/plan_captured_tag", self.on_plan_captured, 10
+        )
         self.create_subscription(
             PointStamped,
             "/apriltag/plan_to_tag_point",
             self.on_point_trigger,
             10,
         )
-        self._make_button()
+        self._make_buttons()
 
         mode = "plan+execute" if self.execute else "plan-only"
         self.get_logger().info(
             "PlanToTag ready "
             f"mode={mode} group={self.group_name} target_link={self.target_link} "
-            f"tag={self.tag_frame} trigger=/apriltag/plan_to_tag rviz_button=/plan_to_tag_button"
+            f"tag={self.tag_frame} capture=/apriltag/capture_tag plan=/apriltag/plan_captured_tag "
+            "rviz_buttons=/plan_to_tag_button"
         )
 
     def on_trigger(self, _msg: Empty) -> None:
         self.plan_to_tag("topic")
 
+    def on_capture(self, _msg: Empty) -> None:
+        self.capture_tag("topic")
+
+    def on_plan_captured(self, _msg: Empty) -> None:
+        self.plan_captured("topic")
+
     def on_point_trigger(self, _msg: PointStamped) -> None:
-        self.plan_to_tag("rviz")
+        self.capture_tag("rviz")
 
     def on_button_feedback(self, feedback) -> None:
-        if feedback.event_type == feedback.BUTTON_CLICK:
-            self.plan_to_tag("rviz_button")
+        if feedback.event_type != feedback.BUTTON_CLICK:
+            return
+        if feedback.marker_name == "capture_tag":
+            self.capture_tag("rviz_button")
+        elif feedback.marker_name == "plan_captured":
+            self.plan_captured("rviz_button")
 
-    def _make_button(self) -> None:
+    def _make_buttons(self) -> None:
+        self._insert_button(
+            name="capture_tag",
+            description="CAPTURE TAG",
+            y_offset=0.0,
+            color=(0.10, 0.40, 1.0),
+        )
+        self._insert_button(
+            name="plan_captured",
+            description="PLAN CAPTURED",
+            y_offset=-0.14,
+            color=(0.05, 0.65, 0.20),
+        )
+        self.button_server.applyChanges()
+
+    def _insert_button(self, name: str, description: str, y_offset: float, color) -> None:
         button = InteractiveMarker()
         button.header.frame_id = self.fixed_frame
-        button.name = "plan_to_tag"
-        button.description = "PLAN TO TAG"
+        button.name = name
+        button.description = description
         button.scale = 0.16
         button.pose.position.x = self.button_x
-        button.pose.position.y = self.button_y
+        button.pose.position.y = self.button_y + y_offset
         button.pose.position.z = self.button_z
         button.pose.orientation.w = 1.0
 
@@ -110,9 +148,9 @@ class PlanToTag(Node):
         box.scale.x = 0.20
         box.scale.y = 0.08
         box.scale.z = 0.04
-        box.color.r = 0.05
-        box.color.g = 0.65
-        box.color.b = 0.20
+        box.color.r = color[0]
+        box.color.g = color[1]
+        box.color.b = color[2]
         box.color.a = 0.95
 
         label = Marker()
@@ -123,7 +161,7 @@ class PlanToTag(Node):
         label.color.g = 1.0
         label.color.b = 1.0
         label.color.a = 1.0
-        label.text = "PLAN TO TAG"
+        label.text = description
 
         control = InteractiveMarkerControl()
         control.name = "click"
@@ -133,13 +171,17 @@ class PlanToTag(Node):
         button.controls.append(control)
 
         self.button_server.insert(button, feedback_callback=self.on_button_feedback)
-        self.button_server.applyChanges()
 
     def plan_to_tag(self, source: str) -> None:
+        captured = self.capture_tag(source)
+        if captured:
+            self.plan_captured(source)
+
+    def capture_tag(self, source: str) -> bool:
         tag_tf = self._lookup(self.fixed_frame, self.tag_frame)
         camera_tf = self._lookup(self.fixed_frame, self.camera_frame)
         if tag_tf is None or camera_tf is None:
-            return
+            return False
 
         tag = tag_tf.transform.translation
         camera = camera_tf.transform.translation
@@ -149,20 +191,45 @@ class PlanToTag(Node):
         norm = math.sqrt(dx * dx + dy * dy + dz * dz)
         if norm < 1e-6:
             self.get_logger().warn("Camera and tag are at the same TF point; cannot choose approach side")
-            return
+            return False
 
         scale = self.approach_distance / norm
+        captured_tag = Pose()
+        captured_tag.position.x = tag.x
+        captured_tag.position.y = tag.y
+        captured_tag.position.z = tag.z
+        captured_tag.orientation = tag_tf.transform.rotation
+
         target = Pose()
         target.position.x = tag.x + dx * scale
         target.position.y = tag.y + dy * scale
         target.position.z = tag.z + dz * scale
         target.orientation.w = 1.0
 
+        self.captured_tag_pose = captured_tag
+        self.captured_target_pose = target
+        self.captured_range = norm
+        self._publish_captured_marker()
         self._publish_goal_marker(target)
         self.get_logger().info(
-            f"{source} trigger: planning {self.target_link} to "
+            f"{source} capture: froze {self.tag_frame} at "
+            f"({captured_tag.position.x:.3f}, {captured_tag.position.y:.3f}, {captured_tag.position.z:.3f}) "
+            f"in {self.fixed_frame}; range={norm:.3f}m"
+        )
+        return True
+
+    def plan_captured(self, source: str) -> None:
+        if self.captured_target_pose is None:
+            self.get_logger().warn("No captured tag pose yet. Press CAPTURE TAG first.")
+            return
+
+        target = self.captured_target_pose
+        self._publish_captured_marker()
+        self._publish_goal_marker(target)
+        self.get_logger().info(
+            f"{source} plan: planning {self.target_link} to captured target "
             f"({target.position.x:.3f}, {target.position.y:.3f}, {target.position.z:.3f}) "
-            f"in {self.fixed_frame}; tag range={norm:.3f}m"
+            f"in {self.fixed_frame}; captured range={self.captured_range:.3f}m"
         )
 
         if not self.move_group.wait_for_server(timeout_sec=2.0):
@@ -248,6 +315,27 @@ class PlanToTag(Node):
         marker.color.b = 0.2
         marker.color.a = 0.85
         self.goal_marker_pub.publish(marker)
+
+    def _publish_captured_marker(self) -> None:
+        if self.captured_tag_pose is None:
+            return
+
+        marker = Marker()
+        marker.header.frame_id = self.fixed_frame
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.ns = "captured_tag"
+        marker.id = 1
+        marker.type = Marker.CUBE
+        marker.action = Marker.ADD
+        marker.pose = self.captured_tag_pose
+        marker.scale.x = self.tag_size * 1.5
+        marker.scale.y = self.tag_size
+        marker.scale.z = self.tag_size * 0.6
+        marker.color.r = 1.0
+        marker.color.g = 0.05
+        marker.color.b = 0.05
+        marker.color.a = 0.75
+        self.captured_marker_pub.publish(marker)
 
     def _on_goal_response(self, future) -> None:
         goal_handle = future.result()

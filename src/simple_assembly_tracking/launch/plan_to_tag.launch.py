@@ -44,6 +44,9 @@ def generate_launch_description():
                         "approach_distance": ParameterValue(
                             LaunchConfiguration("approach_distance"), value_type=float
                         ),
+                        "tag_size": ParameterValue(
+                            LaunchConfiguration("tag_size"), value_type=float
+                        ),
                         "goal_tolerance": ParameterValue(
                             LaunchConfiguration("goal_tolerance"), value_type=float
                         ),
