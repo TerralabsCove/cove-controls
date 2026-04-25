@@ -58,6 +58,9 @@ class PlanToTag(Node):
         self.approach_distance = float(
             self.declare_parameter("approach_distance", 0.20).value
         )
+        self.max_plan_step = float(
+            self.declare_parameter("max_plan_step", 0.05).value
+        )
         self.tag_size = float(self.declare_parameter("tag_size", 0.162).value)
         self.goal_tolerance = float(
             self.declare_parameter("goal_tolerance", 0.04).value
@@ -100,6 +103,8 @@ class PlanToTag(Node):
         self.captured_tag_pose = None
         self.captured_target_pose = None
         self.captured_camera_target_pose = None
+        self.captured_desired_camera_pose = None
+        self.captured_plan_step = None
         self.captured_range = None
         self.latest_joint_state = None
 
@@ -247,6 +252,11 @@ class PlanToTag(Node):
         camera_target.position.y = tag.y + dy * scale
         camera_target.position.z = tag.z + dz * scale
         camera_target.orientation = camera_tf.transform.rotation
+        desired_camera_target = camera_target
+        camera_target, plan_step = self._clamp_camera_target(
+            camera_tf.transform.translation,
+            desired_camera_target,
+        )
 
         target = Pose()
         if self.target_link == self.camera_frame:
@@ -262,13 +272,17 @@ class PlanToTag(Node):
         self.captured_tag_pose = captured_tag
         self.captured_target_pose = target
         self.captured_camera_target_pose = camera_target
+        self.captured_desired_camera_pose = desired_camera_target
+        self.captured_plan_step = plan_step
         self.captured_range = norm
         self._publish_captured_marker()
         self._publish_goal_marker(camera_target)
+        full_step = max(norm - self.approach_distance, 0.0)
         self.get_logger().info(
             f"{source} capture: froze {self.tag_frame} at "
             f"({captured_tag.position.x:.3f}, {captured_tag.position.y:.3f}, {captured_tag.position.z:.3f}) "
-            f"in {self.fixed_frame}; range={norm:.3f}m"
+            f"in {self.fixed_frame}; range={norm:.3f}m; "
+            f"plan_step={plan_step:.3f}m full_approach_step={full_step:.3f}m"
         )
         return True
 
@@ -283,7 +297,8 @@ class PlanToTag(Node):
         self.get_logger().info(
             f"{source} plan: planning {self.target_link} to captured target "
             f"({target.position.x:.3f}, {target.position.y:.3f}, {target.position.z:.3f}) "
-            f"in {self.fixed_frame}; captured range={self.captured_range:.3f}m"
+            f"in {self.fixed_frame}; captured range={self.captured_range:.3f}m "
+            f"step={self.captured_plan_step:.3f}m"
         )
 
         if not self.ik_client.wait_for_service(timeout_sec=2.0):
@@ -360,6 +375,26 @@ class PlanToTag(Node):
         msg.sec = whole
         msg.nanosec = int((seconds - whole) * 1_000_000_000)
         return msg
+
+    def _clamp_camera_target(self, camera_position, desired: Pose):
+        dx = desired.position.x - camera_position.x
+        dy = desired.position.y - camera_position.y
+        dz = desired.position.z - camera_position.z
+        distance = math.sqrt(dx * dx + dy * dy + dz * dz)
+        if distance < 1e-6:
+            return desired, 0.0
+
+        max_step = max(self.max_plan_step, 0.0)
+        if max_step == 0.0 or distance <= max_step:
+            return desired, distance
+
+        scale = max_step / distance
+        clamped = Pose()
+        clamped.position.x = camera_position.x + dx * scale
+        clamped.position.y = camera_position.y + dy * scale
+        clamped.position.z = camera_position.z + dz * scale
+        clamped.orientation = desired.orientation
+        return clamped, max_step
 
     def _lookup(self, target_frame: str, source_frame: str):
         try:
