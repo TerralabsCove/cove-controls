@@ -5,7 +5,7 @@ import rclpy
 from rclpy.duration import Duration
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
-from tf2_ros import Buffer, TransformException, TransformListener
+from apriltag_msgs.msg import AprilTagDetectionArray
 from visualization_msgs.msg import Marker, MarkerArray
 
 
@@ -44,43 +44,59 @@ class TagTfMarker(Node):
             self.declare_parameter("show_dummy_object", True).value
         )
         self.dummy_frame = str(self.declare_parameter("dummy_frame", "root").value)
+        self.detections_topic = str(
+            self.declare_parameter("detections_topic", "/detections").value
+        )
 
-        self.tf_buffer = Buffer()
-        self.tf_listener = TransformListener(self.tf_buffer, self)
+        self.active_tag_frames = {}
+        self.create_subscription(
+            AprilTagDetectionArray,
+            self.detections_topic,
+            self.on_detections,
+            10,
+        )
         self.pub = self.create_publisher(MarkerArray, "/apriltag/tag_marker", 10)
         self.timer = self.create_timer(0.1, self.publish_marker)
 
         self.get_logger().info(
-            f"Publishing generic tracked-object markers on /apriltag/tag_marker from TF frames under {self.source_frame}"
+            f"Publishing generic tracked-object markers on /apriltag/tag_marker from live detections on {self.detections_topic}"
         )
+
+    def on_detections(self, msg: AprilTagDetectionArray) -> None:
+        now_ns = self.get_clock().now().nanoseconds
+        valid_frames = set(self.tag_frames)
+        for detection in msg.detections:
+            tag_frame = f"tag_{int(detection.id)}"
+            if tag_frame in valid_frames:
+                self.active_tag_frames[tag_frame] = now_ns
 
     def publish_marker(self) -> None:
         markers = []
         if self.show_dummy_object:
             markers.append(self._dummy_marker())
-        first_error = None
-        for index, tag_frame in enumerate(self.tag_frames):
-            try:
-                self.tf_buffer.lookup_transform(
-                    self.source_frame,
-                    str(tag_frame),
-                    rclpy.time.Time(),
-                    timeout=Duration(seconds=self.lookup_timeout),
-                )
-            except TransformException as exc:
-                if first_error is None:
-                    first_error = exc
-                continue
-            markers.extend(self._markers_for_transform(index, str(tag_frame)))
 
-        if not markers:
+        now_ns = self.get_clock().now().nanoseconds
+        max_age_ns = int(self.marker_lifetime * 1e9)
+        active_frames = [
+            tag_frame
+            for tag_frame, last_seen_ns in self.active_tag_frames.items()
+            if now_ns - last_seen_ns <= max_age_ns
+        ]
+        self.active_tag_frames = {
+            tag_frame: self.active_tag_frames[tag_frame] for tag_frame in active_frames
+        }
+
+        for index, tag_frame in enumerate(sorted(active_frames)):
+            markers.extend(self._markers_for_transform(index, tag_frame))
+
+        if len(markers) == (1 if self.show_dummy_object else 0):
             self.get_logger().warn(
-                f"No configured AprilTag TF frames found yet: {first_error}",
+                "No active AprilTag detections yet",
                 throttle_duration_sec=2.0,
             )
-            return
 
-        self.pub.publish(MarkerArray(markers=markers))
+        if markers:
+            self.pub.publish(MarkerArray(markers=markers))
 
     def _dummy_marker(self):
         stamp = self.get_clock().now().to_msg()
