@@ -1,0 +1,51 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+  - Class: rviz_common/Views
+    Name: Views
+Visualization Manager:
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Plane: XY
+      Value: true
+    - Class: rviz_default_plugins/TF
+      Name: TF
+      Marker Scale: 0.2
+      Show Arrows: true
+      Show Axes: true
+      Show Names: true
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Name: AprilTag Marker
+      Topic:
+        Value: /apriltag/tag_marker
+      Value: true
+    - Class: rviz_default_plugins/Image
+      Name: Camera
+      Topic:
+        Value: /camera/image_raw
+      Value: true
+  Global Options:
+    Fixed Frame: apriltag_debug_root
+    Frame Rate: 30
+  Tools:
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+  Value: true
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 1.0
+      Focal Point:
+        X: 0.0
+        Y: 0.0
+        Z: 0.5
+      Name: Current View
+      Pitch: 0.5
+      Target Frame: camera_optical_frame
+      Yaw: 0.8
+Window Geometry:
+  Height: 900
+  Width: 1200

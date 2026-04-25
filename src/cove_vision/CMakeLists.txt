@@ -8,4 +8,11 @@ install(
   DESTINATION share/${PROJECT_NAME}
 )
 
+install(
+  PROGRAMS
+    nodes/tag_tf_marker.py
+    nodes/robot_description_topic.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 ament_package()

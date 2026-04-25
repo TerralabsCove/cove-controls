@@ -12,4 +12,4 @@ export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
 export CYCLONEDDS_URI="file://$REPO_ROOT/config/pi/simple_assembly_cyclonedds_pi.xml"
 
-ros2 launch simple_assembly_tracking_moveit_config robot.launch.py "$@"
+ros2 launch simple_assembly_tracking_moveit_config robot.launch.py enable_tracker:=false "$@"

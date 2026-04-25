@@ -29,11 +29,21 @@ Visualization Manager:
       Collision Enabled: false
     - Class: rviz_default_plugins/TF
       Name: TF
-      Value: false
+      Value: true
       Marker Scale: 0.3
       Show Arrows: true
       Show Axes: true
-      Show Names: false
+      Show Names: true
+    - Class: rviz_default_plugins/MarkerArray
+      Name: AprilTag Marker
+      Topic:
+        Value: /apriltag/tag_marker
+      Value: true
+    - Class: rviz_default_plugins/Image
+      Name: Camera
+      Topic:
+        Value: /camera/image_raw
+      Value: true
     - Class: moveit_rviz_plugin/MotionPlanning
       Name: MotionPlanning
       Planned Path:

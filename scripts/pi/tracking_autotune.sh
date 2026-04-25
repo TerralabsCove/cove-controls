@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+set +u
+source /opt/ros/jazzy/setup.bash
+source "$REPO_ROOT/install/setup.bash"
+set -u
+
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
+export CYCLONEDDS_URI="file://$REPO_ROOT/config/pi/simple_assembly_cyclonedds_pi.xml"
+
+cleanup() {
+  if [[ -n "${LAUNCH_PID:-}" ]] && kill -0 "$LAUNCH_PID" 2>/dev/null; then
+    kill -INT "$LAUNCH_PID" 2>/dev/null || true
+    wait "$LAUNCH_PID" 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT
+
+# Start the robot + camera + apriltag stack with tracker disabled.
+ros2 launch simple_assembly_tracking_moveit_config robot.launch.py enable_tracker:=false &
+LAUNCH_PID=$!
+
+sleep 5
+ros2 run simple_assembly_tracking autotune_sweep.py "$@"
+

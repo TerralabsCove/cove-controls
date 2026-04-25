@@ -1,5 +1,6 @@
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
@@ -32,6 +33,7 @@ def generate_launch_description():
     ld.add_action(DeclareLaunchArgument("tilt_sign", default_value="-1.0"))
     ld.add_action(DeclareLaunchArgument("deadband_px", default_value="25.0"))
     ld.add_action(DeclareLaunchArgument("trajectory_duration", default_value="0.15"))
+    ld.add_action(DeclareLaunchArgument("enable_tracker", default_value="false"))
 
     # --- Robot stack ---
     ld.add_action(
@@ -107,6 +109,22 @@ def generate_launch_description():
             ],
         )
     )
+    ld.add_action(
+        Node(
+            package="cove_vision",
+            executable="tag_tf_marker.py",
+            name="tag_tf_marker",
+            output="screen",
+            parameters=[
+                {
+                    "source_frame": LaunchConfiguration("camera_frame_id"),
+                    "tag_size": ParameterValue(
+                        LaunchConfiguration("tag_size"), value_type=float
+                    ),
+                },
+            ],
+        )
+    )
 
     # --- Tag tracker ---
     ld.add_action(
@@ -115,6 +133,7 @@ def generate_launch_description():
             executable="tag_tracker.py",
             name="tag_tracker",
             output="screen",
+            condition=IfCondition(LaunchConfiguration("enable_tracker")),
             parameters=[
                 {
                     "tag_id": ParameterValue(
