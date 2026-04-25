@@ -23,7 +23,7 @@ def generate_launch_description():
             DeclareLaunchArgument("tag_frame", default_value="tag_0"),
             DeclareLaunchArgument("approach_distance", default_value="0.20"),
             DeclareLaunchArgument("goal_tolerance", default_value="0.04"),
-            DeclareLaunchArgument("target_link", default_value="camera_optical_frame"),
+            DeclareLaunchArgument("target_link", default_value="wrist_link"),
             DeclareLaunchArgument("execute", default_value="false"),
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(robot_launch),

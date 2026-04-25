@@ -28,7 +28,7 @@ class PlanToTag(Node):
             self.declare_parameter("camera_frame", "camera_optical_frame").value
         )
         self.target_link = str(
-            self.declare_parameter("target_link", "camera_optical_frame").value
+            self.declare_parameter("target_link", "wrist_link").value
         )
         self.group_name = str(self.declare_parameter("group_name", "arm").value)
         self.move_action = str(
@@ -280,6 +280,7 @@ class PlanToTag(Node):
         position = PositionConstraint()
         position.header.frame_id = self.fixed_frame
         position.link_name = self.target_link
+        position.target_point_offset = self._target_point_offset()
         position.constraint_region.primitives.append(sphere)
         position.constraint_region.primitive_poses.append(target)
         position.weight = 1.0
@@ -289,6 +290,24 @@ class PlanToTag(Node):
         constraints.position_constraints.append(position)
         request.goal_constraints.append(constraints)
         return request
+
+    def _target_point_offset(self):
+        offset = PositionConstraint().target_point_offset
+        if self.target_link == self.camera_frame:
+            return offset
+
+        transform = self._lookup(self.target_link, self.camera_frame)
+        if transform is None:
+            self.get_logger().warn(
+                f"Could not resolve {self.target_link} -> {self.camera_frame}; "
+                "planning with zero target_point_offset"
+            )
+            return offset
+
+        offset.x = transform.transform.translation.x
+        offset.y = transform.transform.translation.y
+        offset.z = transform.transform.translation.z
+        return offset
 
     def _planning_options(self) -> PlanningOptions:
         options = PlanningOptions()
