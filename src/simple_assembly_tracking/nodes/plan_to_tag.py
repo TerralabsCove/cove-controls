@@ -287,7 +287,7 @@ class PlanToTag(Node):
         self.captured_target_link_orientation = target_orientation
         self.captured_target_to_camera_offset = target_offset
         self._publish_captured_marker()
-        self._publish_goal_marker(desired_camera_target)
+        self._clear_goal_marker()
         self.get_logger().info(
             f"{source} capture: froze {self.tag_frame} at "
             f"({captured_tag.position.x:.3f}, {captured_tag.position.y:.3f}, {captured_tag.position.z:.3f}) "
@@ -302,7 +302,7 @@ class PlanToTag(Node):
             return
 
         self._publish_captured_marker()
-        self._publish_goal_marker(self.captured_desired_camera_pose)
+        self._clear_goal_marker()
         self.get_logger().info(
             f"{source} plan: searching closest reachable {self.target_link} target "
             f"in {self.fixed_frame}; captured range={self.captured_range:.3f}m "
@@ -382,22 +382,37 @@ class PlanToTag(Node):
         if len(joints) != len(self.arm_joint_names):
             found = ", ".join(name for name, _ in joints) or "none"
             expected = ", ".join(self.arm_joint_names)
-            self.get_logger().error(
-                f"MoveIt IK returned incomplete arm joint state. found=[{found}] expected=[{expected}]"
+            self.get_logger().warn(
+                f"MoveIt IK returned incomplete arm joint state for step={step:.3f}m. "
+                f"found=[{found}] expected=[{expected}]; trying next candidate"
             )
+            self._try_ik_candidates(candidates, source, index + 1)
             return
 
-        self.captured_camera_target_pose = camera_target
-        self.captured_target_pose = target
-        self.captured_plan_step = step
-        self._publish_goal_marker(camera_target)
         self.get_logger().info(
-            f"MoveIt IK selected closest reachable target at step={step:.3f}m "
-            f"after {index + 1} attempt(s); planning joint-space path from {source}"
+            f"MoveIt IK solved candidate step={step:.3f}m after {index + 1} attempt(s); "
+            "checking MoveGroup plan"
         )
-        self._send_joint_goal(joints)
+        self._send_joint_goal(
+            joints,
+            source=source,
+            candidates=candidates,
+            index=index,
+            camera_target=camera_target,
+            target=target,
+            step=step,
+        )
 
-    def _send_joint_goal(self, joints) -> None:
+    def _send_joint_goal(
+        self,
+        joints,
+        source: str = "",
+        candidates=None,
+        index: int = 0,
+        camera_target: Pose = None,
+        target: Pose = None,
+        step: float = 0.0,
+    ) -> None:
         if not self.move_group.wait_for_server(timeout_sec=2.0):
             self.get_logger().error(f"MoveGroup action server not available: {self.move_action}")
             return
@@ -407,7 +422,17 @@ class PlanToTag(Node):
         goal.planning_options = self._planning_options()
 
         future = self.move_group.send_goal_async(goal)
-        future.add_done_callback(self._on_goal_response)
+        future.add_done_callback(
+            lambda result: self._on_goal_response(
+                result,
+                source=source,
+                candidates=candidates,
+                index=index,
+                camera_target=camera_target,
+                target=target,
+                step=step,
+            )
+        )
 
     def _selected_joint_positions(self, joint_state: JointState):
         by_name = dict(zip(joint_state.name, joint_state.position))
@@ -626,6 +651,15 @@ class PlanToTag(Node):
         marker.color.a = 0.85
         self.goal_marker_pub.publish(marker)
 
+    def _clear_goal_marker(self) -> None:
+        marker = Marker()
+        marker.header.frame_id = self.fixed_frame
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.ns = "plan_to_tag"
+        marker.id = 1
+        marker.action = Marker.DELETE
+        self.goal_marker_pub.publish(marker)
+
     def _publish_captured_marker(self) -> None:
         if self.captured_tag_pose is None:
             return
@@ -647,24 +681,75 @@ class PlanToTag(Node):
         marker.color.a = 0.75
         self.captured_marker_pub.publish(marker)
 
-    def _on_goal_response(self, future) -> None:
+    def _on_goal_response(
+        self,
+        future,
+        source: str = "",
+        candidates=None,
+        index: int = 0,
+        camera_target: Pose = None,
+        target: Pose = None,
+        step: float = 0.0,
+    ) -> None:
         goal_handle = future.result()
         if not goal_handle.accepted:
-            self.get_logger().error("MoveGroup rejected the plan-to-tag request")
+            if candidates is not None:
+                self.get_logger().warn(
+                    f"MoveGroup rejected candidate step={step:.3f}m; trying next candidate"
+                )
+                self._try_ik_candidates(candidates, source, index + 1)
+            else:
+                self.get_logger().error("MoveGroup rejected the plan-to-tag request")
             return
 
         self.get_logger().info("MoveGroup accepted the plan-to-tag request")
         result_future = goal_handle.get_result_async()
-        result_future.add_done_callback(self._on_result)
+        result_future.add_done_callback(
+            lambda result: self._on_result(
+                result,
+                source=source,
+                candidates=candidates,
+                index=index,
+                camera_target=camera_target,
+                target=target,
+                step=step,
+            )
+        )
 
-    def _on_result(self, future) -> None:
+    def _on_result(
+        self,
+        future,
+        source: str = "",
+        candidates=None,
+        index: int = 0,
+        camera_target: Pose = None,
+        target: Pose = None,
+        step: float = 0.0,
+    ) -> None:
         result = future.result().result
         code = result.error_code.val
         if code != MoveItErrorCodes.SUCCESS:
-            self.get_logger().error(
-                f"MoveGroup failed plan-to-tag request: error_code={code}"
-            )
+            if candidates is not None:
+                self.get_logger().warn(
+                    f"MoveGroup failed candidate step={step:.3f}m: error_code={code}; "
+                    "trying next candidate"
+                )
+                self._try_ik_candidates(candidates, source, index + 1)
+            else:
+                self.get_logger().error(
+                    f"MoveGroup failed plan-to-tag request: error_code={code}"
+                )
             return
+
+        if camera_target is not None and target is not None:
+            self.captured_camera_target_pose = camera_target
+            self.captured_target_pose = target
+            self.captured_plan_step = step
+            self._publish_goal_marker(camera_target)
+            self.get_logger().info(
+                f"MoveIt selected closest plannable target at step={step:.3f}m "
+                f"after {index + 1} candidate attempt(s)"
+            )
 
         display = DisplayTrajectory()
         display.model_id = "simple_assembly_tracking"
