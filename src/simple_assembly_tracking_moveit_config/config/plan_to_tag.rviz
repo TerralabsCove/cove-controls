@@ -7,6 +7,7 @@ Panels:
         - /RobotModel1
         - /AprilTag Marker1
         - /Plan Goal1
+        - /Plan Button1
   - Class: rviz_common/Help
     Name: Help
   - Class: rviz_common/Views
@@ -45,6 +46,14 @@ Visualization Manager:
       Name: Plan Goal
       Topic:
         Value: /apriltag/plan_goal_marker
+      Value: true
+    - Class: rviz_default_plugins/InteractiveMarkers
+      Name: Plan Button
+      Show Axes: false
+      Show Descriptions: true
+      Show Visual Aids: false
+      Update Topic:
+        Value: /plan_to_tag_button/update
       Value: true
     - Class: moveit_rviz_plugin/MotionPlanning
       Name: MotionPlanning

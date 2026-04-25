@@ -3,6 +3,7 @@
 
 import math
 
+from interactive_markers import InteractiveMarkerServer
 import rclpy
 from geometry_msgs.msg import PointStamped, Pose
 from moveit_msgs.action import MoveGroup
@@ -14,7 +15,7 @@ from rclpy.node import Node
 from shape_msgs.msg import SolidPrimitive
 from std_msgs.msg import Empty
 from tf2_ros import Buffer, TransformException, TransformListener
-from visualization_msgs.msg import Marker
+from visualization_msgs.msg import InteractiveMarker, InteractiveMarkerControl, Marker
 
 
 class PlanToTag(Node):
@@ -52,10 +53,14 @@ class PlanToTag(Node):
         self.workspace_radius = float(
             self.declare_parameter("workspace_radius", 2.0).value
         )
+        self.button_x = float(self.declare_parameter("button_x", 0.35).value)
+        self.button_y = float(self.declare_parameter("button_y", -0.25).value)
+        self.button_z = float(self.declare_parameter("button_z", 0.45).value)
 
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
         self.move_group = ActionClient(self, MoveGroup, self.move_action)
+        self.button_server = InteractiveMarkerServer(self, "plan_to_tag_button")
 
         self.display_pub = self.create_publisher(
             DisplayTrajectory, "/display_planned_path", 10
@@ -70,12 +75,13 @@ class PlanToTag(Node):
             self.on_point_trigger,
             10,
         )
+        self._make_button()
 
         mode = "plan+execute" if self.execute else "plan-only"
         self.get_logger().info(
             "PlanToTag ready "
             f"mode={mode} group={self.group_name} target_link={self.target_link} "
-            f"tag={self.tag_frame} trigger=/apriltag/plan_to_tag"
+            f"tag={self.tag_frame} trigger=/apriltag/plan_to_tag rviz_button=/plan_to_tag_button"
         )
 
     def on_trigger(self, _msg: Empty) -> None:
@@ -83,6 +89,51 @@ class PlanToTag(Node):
 
     def on_point_trigger(self, _msg: PointStamped) -> None:
         self.plan_to_tag("rviz")
+
+    def on_button_feedback(self, feedback) -> None:
+        if feedback.event_type == feedback.BUTTON_CLICK:
+            self.plan_to_tag("rviz_button")
+
+    def _make_button(self) -> None:
+        button = InteractiveMarker()
+        button.header.frame_id = self.fixed_frame
+        button.name = "plan_to_tag"
+        button.description = "PLAN TO TAG"
+        button.scale = 0.16
+        button.pose.position.x = self.button_x
+        button.pose.position.y = self.button_y
+        button.pose.position.z = self.button_z
+        button.pose.orientation.w = 1.0
+
+        box = Marker()
+        box.type = Marker.CUBE
+        box.scale.x = 0.20
+        box.scale.y = 0.08
+        box.scale.z = 0.04
+        box.color.r = 0.05
+        box.color.g = 0.65
+        box.color.b = 0.20
+        box.color.a = 0.95
+
+        label = Marker()
+        label.type = Marker.TEXT_VIEW_FACING
+        label.pose.position.z = 0.07
+        label.scale.z = 0.035
+        label.color.r = 1.0
+        label.color.g = 1.0
+        label.color.b = 1.0
+        label.color.a = 1.0
+        label.text = "PLAN TO TAG"
+
+        control = InteractiveMarkerControl()
+        control.name = "click"
+        control.interaction_mode = InteractiveMarkerControl.BUTTON
+        control.always_visible = True
+        control.markers.extend([box, label])
+        button.controls.append(control)
+
+        self.button_server.insert(button, feedback_callback=self.on_button_feedback)
+        self.button_server.applyChanges()
 
     def plan_to_tag(self, source: str) -> None:
         tag_tf = self._lookup(self.fixed_frame, self.tag_frame)
