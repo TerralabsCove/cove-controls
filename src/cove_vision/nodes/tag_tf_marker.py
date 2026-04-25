@@ -6,6 +6,7 @@ from rclpy.duration import Duration
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from apriltag_msgs.msg import AprilTagDetectionArray
+from tf2_ros import Buffer, TransformException, TransformListener
 from visualization_msgs.msg import Marker, MarkerArray
 
 
@@ -25,7 +26,11 @@ class TagTfMarker(Node):
         self.tag_size = float(self.declare_parameter("tag_size", 0.162).value)
         self.lookup_timeout = float(self.declare_parameter("lookup_timeout", 0.05).value)
         self.marker_lifetime = float(
-            self.declare_parameter("marker_lifetime", 0.25).value
+            self.declare_parameter("marker_lifetime", 1.5).value
+        )
+        self.fixed_frame = str(self.declare_parameter("fixed_frame", "root").value)
+        self.hold_duration = float(
+            self.declare_parameter("hold_duration", self.marker_lifetime).value
         )
         self.object_width = float(
             self.declare_parameter("object_width", self.tag_size * 1.5).value
@@ -50,6 +55,9 @@ class TagTfMarker(Node):
 
         self.active_tag_frames = {}
         self.last_logged_tag_ids = ()
+        self.last_logged_missing_tf = {}
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self)
         self.create_subscription(
             AprilTagDetectionArray,
             self.detections_topic,
@@ -60,7 +68,7 @@ class TagTfMarker(Node):
         self.timer = self.create_timer(0.1, self.publish_marker)
 
         self.get_logger().info(
-            f"Publishing generic tracked-object markers on /apriltag/tag_marker from live detections on {self.detections_topic}"
+            f"Publishing generic tracked-object markers on /apriltag/tag_marker from live detections on {self.detections_topic}; fixed_frame={self.fixed_frame}"
         )
 
     def on_detections(self, msg: AprilTagDetectionArray) -> None:
@@ -86,7 +94,7 @@ class TagTfMarker(Node):
             markers.append(self._dummy_marker())
 
         now_ns = self.get_clock().now().nanoseconds
-        max_age_ns = int(self.marker_lifetime * 1e9)
+        max_age_ns = int(self.hold_duration * 1e9)
         active_frames = [
             tag_frame
             for tag_frame, last_seen_ns in self.active_tag_frames.items()
@@ -97,7 +105,9 @@ class TagTfMarker(Node):
         }
 
         for index, tag_frame in enumerate(sorted(active_frames)):
-            markers.extend(self._markers_for_transform(index, tag_frame))
+            marker_set = self._markers_for_transform(index, tag_frame)
+            if marker_set:
+                markers.extend(marker_set)
 
         if len(markers) == (1 if self.show_dummy_object else 0):
             self.get_logger().warn(
@@ -132,18 +142,36 @@ class TagTfMarker(Node):
         return marker
 
     def _markers_for_transform(self, index, tag_frame):
+        try:
+            transform = self.tf_buffer.lookup_transform(
+                self.fixed_frame,
+                tag_frame,
+                rclpy.time.Time(),
+                timeout=Duration(seconds=self.lookup_timeout),
+            )
+        except TransformException as exc:
+            self.get_logger().warn(
+                f"Detected {tag_frame}, but RViz marker cannot resolve TF {self.fixed_frame} -> {tag_frame}: {exc}",
+                throttle_duration_sec=1.0,
+            )
+            return []
+
         stamp = self.get_clock().now().to_msg()
         lifetime = Duration(seconds=self.marker_lifetime).to_msg()
 
         body = Marker()
-        body.header.frame_id = tag_frame
+        body.header.frame_id = self.fixed_frame
         body.header.stamp = stamp
         body.ns = "tracked_object"
         body.id = index * 3
         body.type = Marker.CUBE
         body.action = Marker.ADD
-        body.pose.position.z = -self.object_depth * 0.5
-        body.pose.orientation.w = 1.0
+        body.pose.position.x = transform.transform.translation.x
+        body.pose.position.y = transform.transform.translation.y
+        body.pose.position.z = (
+            transform.transform.translation.z - self.object_depth * 0.5
+        )
+        body.pose.orientation = transform.transform.rotation
         body.scale.x = self.object_width
         body.scale.y = self.object_height
         body.scale.z = self.object_depth
@@ -158,13 +186,16 @@ class TagTfMarker(Node):
 
         if self.show_tag_face:
             tag_face = Marker()
-            tag_face.header.frame_id = tag_frame
+            tag_face.header.frame_id = self.fixed_frame
             tag_face.header.stamp = stamp
             tag_face.ns = "apriltag"
             tag_face.id = index * 3 + 1
             tag_face.type = Marker.CUBE
             tag_face.action = Marker.ADD
-            tag_face.pose.orientation.w = 1.0
+            tag_face.pose.position.x = transform.transform.translation.x
+            tag_face.pose.position.y = transform.transform.translation.y
+            tag_face.pose.position.z = transform.transform.translation.z
+            tag_face.pose.orientation = transform.transform.rotation
             tag_face.scale.x = self.tag_size
             tag_face.scale.y = self.tag_size
             tag_face.scale.z = 0.01
@@ -178,13 +209,15 @@ class TagTfMarker(Node):
 
         if self.show_label:
             label = Marker()
-            label.header.frame_id = tag_frame
+            label.header.frame_id = self.fixed_frame
             label.header.stamp = stamp
             label.ns = "apriltag"
             label.id = index * 3 + 2
             label.type = Marker.TEXT_VIEW_FACING
             label.action = Marker.ADD
-            label.pose.position.z = self.tag_size * 0.7
+            label.pose.position.x = transform.transform.translation.x
+            label.pose.position.y = transform.transform.translation.y
+            label.pose.position.z = transform.transform.translation.z + self.tag_size * 0.7
             label.pose.orientation.w = 1.0
             label.scale.z = 0.06
             label.color.r = 1.0
