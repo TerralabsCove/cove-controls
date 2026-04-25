@@ -27,6 +27,7 @@ public:
 private Q_SLOTS:
   void captureTag();
   void planCaptured();
+  void executeCaptured();
   void updateTopics();
 
 private:
@@ -37,12 +38,15 @@ private:
   QLabel * status_label_;
   QLineEdit * capture_topic_edit_;
   QLineEdit * plan_topic_edit_;
+  QLineEdit * execute_topic_edit_;
   QPushButton * capture_button_;
   QPushButton * plan_button_;
+  QPushButton * execute_button_;
 
   rclcpp::Node::SharedPtr node_;
   rclcpp::Publisher<std_msgs::msg::Empty>::SharedPtr capture_pub_;
   rclcpp::Publisher<std_msgs::msg::Empty>::SharedPtr plan_pub_;
+  rclcpp::Publisher<std_msgs::msg::Empty>::SharedPtr execute_pub_;
 };
 
 }  // namespace cove_rviz_plugins

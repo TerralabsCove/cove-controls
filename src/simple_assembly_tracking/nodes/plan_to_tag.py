@@ -59,13 +59,13 @@ class PlanToTag(Node):
             self.declare_parameter("approach_distance", 0.20).value
         )
         self.proxy_plan_step = float(
-            self.declare_parameter("proxy_plan_step", 0.10).value
+            self.declare_parameter("proxy_plan_step", 0.25).value
         )
         self.max_plan_step = float(
             self.declare_parameter("max_plan_step", self.proxy_plan_step).value
         )
         self.ik_search_samples = int(
-            self.declare_parameter("ik_search_samples", 20).value
+            self.declare_parameter("ik_search_samples", 10).value
         )
         self.tag_size = float(self.declare_parameter("tag_size", 0.162).value)
         self.goal_tolerance = float(
@@ -123,6 +123,9 @@ class PlanToTag(Node):
             Empty, "/apriltag/plan_captured_tag", self.on_plan_captured, 10
         )
         self.create_subscription(
+            Empty, "/apriltag/execute_captured_tag", self.on_execute_captured, 10
+        )
+        self.create_subscription(
             PointStamped,
             "/apriltag/plan_to_tag_point",
             self.on_point_trigger,
@@ -136,7 +139,8 @@ class PlanToTag(Node):
             "PlanToTag ready "
             f"mode={mode} group={self.group_name} target_link={self.target_link} "
             f"proxy_plan_step={self.proxy_plan_step:.3f}m max_plan_step={self.max_plan_step:.3f}m "
-            f"tag={self.tag_frame} capture=/apriltag/capture_tag plan=/apriltag/plan_captured_tag "
+            f"tag={self.tag_frame} capture=/apriltag/capture_tag "
+            "plan=/apriltag/plan_captured_tag execute=/apriltag/execute_captured_tag "
             "rviz_buttons=/plan_to_tag_button"
         )
 
@@ -150,7 +154,10 @@ class PlanToTag(Node):
         self.capture_tag("topic")
 
     def on_plan_captured(self, _msg: Empty) -> None:
-        self.plan_captured("topic")
+        self.plan_captured("topic", execute_request=False)
+
+    def on_execute_captured(self, _msg: Empty) -> None:
+        self.plan_captured("topic_execute", execute_request=True)
 
     def on_point_trigger(self, _msg: PointStamped) -> None:
         self.capture_tag("rviz")
@@ -221,7 +228,7 @@ class PlanToTag(Node):
     def plan_to_tag(self, source: str) -> None:
         captured = self.capture_tag(source)
         if captured:
-            self.plan_captured(source)
+            self.plan_captured(source, execute_request=False)
 
     def capture_tag(self, source: str) -> bool:
         tag_tf = self._lookup(self.fixed_frame, self.tag_frame)
@@ -300,7 +307,7 @@ class PlanToTag(Node):
         )
         return True
 
-    def plan_captured(self, source: str) -> None:
+    def plan_captured(self, source: str, execute_request: bool = False) -> None:
         if self.captured_desired_camera_pose is None or self.captured_camera_start_pose is None:
             self.get_logger().warn("No captured tag pose yet. Press CAPTURE TAG first.")
             return
@@ -310,7 +317,8 @@ class PlanToTag(Node):
         self.get_logger().info(
             f"{source} plan: searching closest plannable proxy {self.target_link} target "
             f"in {self.fixed_frame}; captured range={self.captured_range:.3f}m "
-            f"proxy_step={self.captured_plan_step:.3f}m"
+            f"proxy_step={self.captured_plan_step:.3f}m "
+            f"mode={'execute' if execute_request else 'plan-only'}"
         )
 
         if not self.ik_client.wait_for_service(timeout_sec=2.0):
@@ -322,9 +330,15 @@ class PlanToTag(Node):
             self.get_logger().warn("No IK candidates generated for captured tag")
             return
 
-        self._try_ik_candidates(candidates, source, 0)
+        self._try_ik_candidates(candidates, source, 0, execute_request)
 
-    def _try_ik_candidates(self, candidates, source: str, index: int) -> None:
+    def _try_ik_candidates(
+        self,
+        candidates,
+        source: str,
+        index: int,
+        execute_request: bool,
+    ) -> None:
         if index >= len(candidates):
             self.get_logger().error(
                 "MoveIt could not find any plannable proxy pose toward the captured tag"
@@ -354,6 +368,7 @@ class PlanToTag(Node):
                 camera_target,
                 target,
                 step,
+                execute_request,
             )
         )
 
@@ -366,6 +381,7 @@ class PlanToTag(Node):
         camera_target: Pose,
         target: Pose,
         step: float,
+        execute_request: bool,
     ) -> None:
         try:
             result = future.result()
@@ -379,7 +395,7 @@ class PlanToTag(Node):
                 self.get_logger().warn(
                     f"Ideal captured pose is not IK-solvable; backing off from step={step:.3f}m"
                 )
-            self._try_ik_candidates(candidates, source, index + 1)
+            self._try_ik_candidates(candidates, source, index + 1, execute_request)
             return
 
         joints = self._selected_joint_positions(result.solution.joint_state)
@@ -390,7 +406,7 @@ class PlanToTag(Node):
                 f"MoveIt IK returned incomplete arm joint state for step={step:.3f}m. "
                 f"found=[{found}] expected=[{expected}]; trying next candidate"
             )
-            self._try_ik_candidates(candidates, source, index + 1)
+            self._try_ik_candidates(candidates, source, index + 1, execute_request)
             return
 
         self.get_logger().info(
@@ -405,6 +421,7 @@ class PlanToTag(Node):
             camera_target=camera_target,
             target=target,
             step=step,
+            execute_request=execute_request,
         )
 
     def _send_joint_goal(
@@ -416,6 +433,7 @@ class PlanToTag(Node):
         camera_target: Pose = None,
         target: Pose = None,
         step: float = 0.0,
+        execute_request: bool = False,
     ) -> None:
         if not self.move_group.wait_for_server(timeout_sec=2.0):
             self.get_logger().error(f"MoveGroup action server not available: {self.move_action}")
@@ -423,7 +441,7 @@ class PlanToTag(Node):
 
         goal = MoveGroup.Goal()
         goal.request = self._joint_motion_plan_request(joints)
-        goal.planning_options = self._planning_options()
+        goal.planning_options = self._planning_options(execute_request)
 
         future = self.move_group.send_goal_async(goal)
         future.add_done_callback(
@@ -435,6 +453,7 @@ class PlanToTag(Node):
                 camera_target=camera_target,
                 target=target,
                 step=step,
+                execute_request=execute_request,
             )
         )
 
@@ -629,9 +648,9 @@ class PlanToTag(Node):
         offset.z = transform.transform.translation.z
         return offset
 
-    def _planning_options(self) -> PlanningOptions:
+    def _planning_options(self, execute_request: bool = False) -> PlanningOptions:
         options = PlanningOptions()
-        options.plan_only = not self.execute
+        options.plan_only = not (self.execute or execute_request)
         options.look_around = False
         options.replan = False
         options.planning_scene_diff.is_diff = True
@@ -694,6 +713,7 @@ class PlanToTag(Node):
         camera_target: Pose = None,
         target: Pose = None,
         step: float = 0.0,
+        execute_request: bool = False,
     ) -> None:
         goal_handle = future.result()
         if not goal_handle.accepted:
@@ -701,7 +721,7 @@ class PlanToTag(Node):
                 self.get_logger().warn(
                     f"MoveGroup rejected candidate step={step:.3f}m; trying next candidate"
                 )
-                self._try_ik_candidates(candidates, source, index + 1)
+                self._try_ik_candidates(candidates, source, index + 1, execute_request)
             else:
                 self.get_logger().error("MoveGroup rejected the plan-to-tag request")
             return
@@ -717,6 +737,7 @@ class PlanToTag(Node):
                 camera_target=camera_target,
                 target=target,
                 step=step,
+                execute_request=execute_request,
             )
         )
 
@@ -729,6 +750,7 @@ class PlanToTag(Node):
         camera_target: Pose = None,
         target: Pose = None,
         step: float = 0.0,
+        execute_request: bool = False,
     ) -> None:
         result = future.result().result
         code = result.error_code.val
@@ -738,7 +760,7 @@ class PlanToTag(Node):
                     f"MoveGroup failed candidate step={step:.3f}m: error_code={code}; "
                     "trying next candidate"
                 )
-                self._try_ik_candidates(candidates, source, index + 1)
+                self._try_ik_candidates(candidates, source, index + 1, execute_request)
             else:
                 self.get_logger().error(
                     f"MoveGroup failed plan-to-tag request: error_code={code}"
@@ -760,7 +782,7 @@ class PlanToTag(Node):
         display.trajectory_start = result.trajectory_start
         display.trajectory.append(result.planned_trajectory)
         self.display_pub.publish(display)
-        action = "executed" if self.execute else "planned"
+        action = "executed" if execute_request else "planned"
         self.get_logger().info(
             f"MoveGroup {action} path in {result.planning_time:.2f}s; published /display_planned_path"
         )
