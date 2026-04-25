@@ -3,19 +3,33 @@
 
 import math
 
+from builtin_interfaces.msg import Duration as DurationMsg
+from geometry_msgs.msg import PointStamped, Pose
 from interactive_markers import InteractiveMarkerServer
 import rclpy
-from geometry_msgs.msg import PointStamped, Pose
 from moveit_msgs.action import MoveGroup
-from moveit_msgs.msg import Constraints, DisplayTrajectory, MoveItErrorCodes
+from moveit_msgs.msg import Constraints, DisplayTrajectory, JointConstraint, MoveItErrorCodes
 from moveit_msgs.msg import MotionPlanRequest, PlanningOptions, PositionConstraint
+from moveit_msgs.srv import GetPositionIK
 from rclpy.action import ActionClient
 from rclpy.duration import Duration
 from rclpy.node import Node
+from sensor_msgs.msg import JointState
 from shape_msgs.msg import SolidPrimitive
 from std_msgs.msg import Empty
 from tf2_ros import Buffer, TransformException, TransformListener
 from visualization_msgs.msg import InteractiveMarker, InteractiveMarkerControl, Marker
+
+
+ARM_JOINTS = [
+    "revolute_1_0",
+    "revolute_2_0",
+    "revolute_3_0",
+    "revolute_4_0",
+    "revolute_5_0",
+    "revolute_6_0",
+    "revolute_7_0",
+]
 
 
 class PlanToTag(Node):
@@ -34,7 +48,13 @@ class PlanToTag(Node):
         self.move_action = str(
             self.declare_parameter("move_action", "/move_action").value
         )
+        self.ik_service = str(
+            self.declare_parameter("ik_service", "/compute_ik").value
+        )
         self.execute = bool(self.declare_parameter("execute", False).value)
+        self.arm_joint_names = list(
+            self.declare_parameter("arm_joint_names", ARM_JOINTS).value
+        )
         self.approach_distance = float(
             self.declare_parameter("approach_distance", 0.20).value
         )
@@ -44,6 +64,10 @@ class PlanToTag(Node):
         )
         self.allowed_planning_time = float(
             self.declare_parameter("allowed_planning_time", 5.0).value
+        )
+        self.ik_timeout = float(self.declare_parameter("ik_timeout", 1.0).value)
+        self.joint_goal_tolerance = float(
+            self.declare_parameter("joint_goal_tolerance", 0.015).value
         )
         self.velocity_scale = float(
             self.declare_parameter("velocity_scale", 0.10).value
@@ -61,6 +85,7 @@ class PlanToTag(Node):
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
         self.move_group = ActionClient(self, MoveGroup, self.move_action)
+        self.ik_client = self.create_client(GetPositionIK, self.ik_service)
         self.button_server = InteractiveMarkerServer(self, "plan_to_tag_button")
 
         self.display_pub = self.create_publisher(
@@ -74,7 +99,9 @@ class PlanToTag(Node):
         )
         self.captured_tag_pose = None
         self.captured_target_pose = None
+        self.captured_camera_target_pose = None
         self.captured_range = None
+        self.latest_joint_state = None
 
         self.create_subscription(Empty, "/apriltag/plan_to_tag", self.on_trigger, 10)
         self.create_subscription(Empty, "/apriltag/capture_tag", self.on_capture, 10)
@@ -87,6 +114,7 @@ class PlanToTag(Node):
             self.on_point_trigger,
             10,
         )
+        self.create_subscription(JointState, "/joint_states", self.on_joint_state, 10)
         self._make_buttons()
 
         mode = "plan+execute" if self.execute else "plan-only"
@@ -96,6 +124,9 @@ class PlanToTag(Node):
             f"tag={self.tag_frame} capture=/apriltag/capture_tag plan=/apriltag/plan_captured_tag "
             "rviz_buttons=/plan_to_tag_button"
         )
+
+    def on_joint_state(self, msg: JointState) -> None:
+        self.latest_joint_state = msg
 
     def on_trigger(self, _msg: Empty) -> None:
         self.plan_to_tag("topic")
@@ -180,7 +211,18 @@ class PlanToTag(Node):
     def capture_tag(self, source: str) -> bool:
         tag_tf = self._lookup(self.fixed_frame, self.tag_frame)
         camera_tf = self._lookup(self.fixed_frame, self.camera_frame)
-        if tag_tf is None or camera_tf is None:
+        target_link_tf = None
+        target_to_camera_tf = None
+        if self.target_link != self.camera_frame:
+            target_link_tf = self._lookup(self.fixed_frame, self.target_link)
+            target_to_camera_tf = self._lookup(self.target_link, self.camera_frame)
+
+        if (
+            tag_tf is None
+            or camera_tf is None
+            or (self.target_link != self.camera_frame and target_link_tf is None)
+            or (self.target_link != self.camera_frame and target_to_camera_tf is None)
+        ):
             return False
 
         tag = tag_tf.transform.translation
@@ -200,17 +242,29 @@ class PlanToTag(Node):
         captured_tag.position.z = tag.z
         captured_tag.orientation = tag_tf.transform.rotation
 
+        camera_target = Pose()
+        camera_target.position.x = tag.x + dx * scale
+        camera_target.position.y = tag.y + dy * scale
+        camera_target.position.z = tag.z + dz * scale
+        camera_target.orientation = camera_tf.transform.rotation
+
         target = Pose()
-        target.position.x = tag.x + dx * scale
-        target.position.y = tag.y + dy * scale
-        target.position.z = tag.z + dz * scale
-        target.orientation.w = 1.0
+        if self.target_link == self.camera_frame:
+            target = camera_target
+        else:
+            offset = target_to_camera_tf.transform.translation
+            target.orientation = target_link_tf.transform.rotation
+            ox, oy, oz = self._rotate_vector(target.orientation, offset)
+            target.position.x = camera_target.position.x - ox
+            target.position.y = camera_target.position.y - oy
+            target.position.z = camera_target.position.z - oz
 
         self.captured_tag_pose = captured_tag
         self.captured_target_pose = target
+        self.captured_camera_target_pose = camera_target
         self.captured_range = norm
         self._publish_captured_marker()
-        self._publish_goal_marker(target)
+        self._publish_goal_marker(camera_target)
         self.get_logger().info(
             f"{source} capture: froze {self.tag_frame} at "
             f"({captured_tag.position.x:.3f}, {captured_tag.position.y:.3f}, {captured_tag.position.z:.3f}) "
@@ -225,23 +279,87 @@ class PlanToTag(Node):
 
         target = self.captured_target_pose
         self._publish_captured_marker()
-        self._publish_goal_marker(target)
+        self._publish_goal_marker(self.captured_camera_target_pose)
         self.get_logger().info(
             f"{source} plan: planning {self.target_link} to captured target "
             f"({target.position.x:.3f}, {target.position.y:.3f}, {target.position.z:.3f}) "
             f"in {self.fixed_frame}; captured range={self.captured_range:.3f}m"
         )
 
+        if not self.ik_client.wait_for_service(timeout_sec=2.0):
+            self.get_logger().error(f"MoveIt IK service not available: {self.ik_service}")
+            return
+
+        request = GetPositionIK.Request()
+        request.ik_request.group_name = self.group_name
+        request.ik_request.ik_link_name = self.target_link
+        request.ik_request.pose_stamped.header.frame_id = self.fixed_frame
+        request.ik_request.pose_stamped.header.stamp = self.get_clock().now().to_msg()
+        request.ik_request.pose_stamped.pose = target
+        request.ik_request.avoid_collisions = False
+        request.ik_request.timeout = self._duration_msg(self.ik_timeout)
+        if self.latest_joint_state is not None:
+            request.ik_request.robot_state.joint_state = self.latest_joint_state
+            request.ik_request.robot_state.is_diff = True
+
+        future = self.ik_client.call_async(request)
+        future.add_done_callback(lambda result: self._on_ik_result(result, source))
+
+    def _on_ik_result(self, future, source: str) -> None:
+        try:
+            result = future.result()
+        except Exception as exc:
+            self.get_logger().error(f"MoveIt IK request failed: {exc}")
+            return
+
+        code = result.error_code.val
+        if code != MoveItErrorCodes.SUCCESS:
+            self.get_logger().error(
+                f"MoveIt IK failed for captured tag: error_code={code} "
+                f"message='{result.error_code.message}'"
+            )
+            return
+
+        joints = self._selected_joint_positions(result.solution.joint_state)
+        if len(joints) != len(self.arm_joint_names):
+            found = ", ".join(name for name, _ in joints) or "none"
+            expected = ", ".join(self.arm_joint_names)
+            self.get_logger().error(
+                f"MoveIt IK returned incomplete arm joint state. found=[{found}] expected=[{expected}]"
+            )
+            return
+
+        self.get_logger().info(
+            f"MoveIt IK solved captured tag target; planning joint-space path from {source}"
+        )
+        self._send_joint_goal(joints)
+
+    def _send_joint_goal(self, joints) -> None:
         if not self.move_group.wait_for_server(timeout_sec=2.0):
             self.get_logger().error(f"MoveGroup action server not available: {self.move_action}")
             return
 
         goal = MoveGroup.Goal()
-        goal.request = self._motion_plan_request(target)
+        goal.request = self._joint_motion_plan_request(joints)
         goal.planning_options = self._planning_options()
 
         future = self.move_group.send_goal_async(goal)
         future.add_done_callback(self._on_goal_response)
+
+    def _selected_joint_positions(self, joint_state: JointState):
+        by_name = dict(zip(joint_state.name, joint_state.position))
+        return [
+            (name, by_name[name])
+            for name in self.arm_joint_names
+            if name in by_name
+        ]
+
+    def _duration_msg(self, seconds: float) -> DurationMsg:
+        whole = int(seconds)
+        msg = DurationMsg()
+        msg.sec = whole
+        msg.nanosec = int((seconds - whole) * 1_000_000_000)
+        return msg
 
     def _lookup(self, target_frame: str, source_frame: str):
         try:
@@ -258,7 +376,7 @@ class PlanToTag(Node):
             )
             return None
 
-    def _motion_plan_request(self, target: Pose) -> MotionPlanRequest:
+    def _base_motion_plan_request(self) -> MotionPlanRequest:
         request = MotionPlanRequest()
         request.group_name = self.group_name
         request.num_planning_attempts = 5
@@ -272,6 +390,28 @@ class PlanToTag(Node):
         request.workspace_parameters.max_corner.x = self.workspace_radius
         request.workspace_parameters.max_corner.y = self.workspace_radius
         request.workspace_parameters.max_corner.z = self.workspace_radius
+        if self.latest_joint_state is not None:
+            request.start_state.joint_state = self.latest_joint_state
+            request.start_state.is_diff = True
+        return request
+
+    def _joint_motion_plan_request(self, joints) -> MotionPlanRequest:
+        request = self._base_motion_plan_request()
+        constraints = Constraints()
+        constraints.name = f"{self.tag_frame}_captured_ik"
+        for name, position in joints:
+            joint = JointConstraint()
+            joint.joint_name = name
+            joint.position = position
+            joint.tolerance_above = self.joint_goal_tolerance
+            joint.tolerance_below = self.joint_goal_tolerance
+            joint.weight = 1.0
+            constraints.joint_constraints.append(joint)
+        request.goal_constraints.append(constraints)
+        return request
+
+    def _motion_plan_request(self, target: Pose) -> MotionPlanRequest:
+        request = self._base_motion_plan_request()
 
         sphere = SolidPrimitive()
         sphere.type = SolidPrimitive.SPHERE
@@ -290,6 +430,28 @@ class PlanToTag(Node):
         constraints.position_constraints.append(position)
         request.goal_constraints.append(constraints)
         return request
+
+    def _rotate_vector(self, quaternion, vector):
+        qx = quaternion.x
+        qy = quaternion.y
+        qz = quaternion.z
+        qw = quaternion.w
+        vx = vector.x
+        vy = vector.y
+        vz = vector.z
+
+        uvx = qy * vz - qz * vy
+        uvy = qz * vx - qx * vz
+        uvz = qx * vy - qy * vx
+        uuvx = qy * uvz - qz * uvy
+        uuvy = qz * uvx - qx * uvz
+        uuvz = qx * uvy - qy * uvx
+
+        return (
+            vx + 2.0 * (qw * uvx + uuvx),
+            vy + 2.0 * (qw * uvy + uuvy),
+            vz + 2.0 * (qw * uvz + uuvz),
+        )
 
     def _target_point_offset(self):
         offset = PositionConstraint().target_point_offset

@@ -19,6 +19,7 @@ def generate_launch_description():
     return LaunchDescription(
         [
             DeclareLaunchArgument("video_device", default_value="/dev/video0"),
+            DeclareLaunchArgument("tag_size", default_value="0.162"),
             DeclareLaunchArgument("tag_id", default_value="0"),
             DeclareLaunchArgument("tag_frame", default_value="tag_0"),
             DeclareLaunchArgument("approach_distance", default_value="0.20"),
