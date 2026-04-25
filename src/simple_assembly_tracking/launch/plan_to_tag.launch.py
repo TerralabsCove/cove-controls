@@ -23,8 +23,9 @@ def generate_launch_description():
             DeclareLaunchArgument("tag_id", default_value="0"),
             DeclareLaunchArgument("tag_frame", default_value="tag_0"),
             DeclareLaunchArgument("approach_distance", default_value="0.20"),
-            DeclareLaunchArgument("max_plan_step", default_value="0.0"),
-            DeclareLaunchArgument("ik_search_samples", default_value="20"),
+            DeclareLaunchArgument("proxy_plan_step", default_value="0.10"),
+            DeclareLaunchArgument("max_plan_step", default_value="0.10"),
+            DeclareLaunchArgument("ik_search_samples", default_value="10"),
             DeclareLaunchArgument("goal_tolerance", default_value="0.04"),
             DeclareLaunchArgument("target_link", default_value="wrist_link"),
             DeclareLaunchArgument("execute", default_value="false"),
@@ -62,6 +63,9 @@ def generate_launch_description():
                         "tag_frame": LaunchConfiguration("tag_frame"),
                         "approach_distance": ParameterValue(
                             LaunchConfiguration("approach_distance"), value_type=float
+                        ),
+                        "proxy_plan_step": ParameterValue(
+                            LaunchConfiguration("proxy_plan_step"), value_type=float
                         ),
                         "max_plan_step": ParameterValue(
                             LaunchConfiguration("max_plan_step"), value_type=float
