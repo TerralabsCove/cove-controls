@@ -1,0 +1,10 @@
+<library path="cove_rviz_plugins">
+  <class
+    name="cove_rviz_plugins/PlanToTagPanel"
+    type="cove_rviz_plugins::PlanToTagPanel"
+    base_class_type="rviz_common::Panel">
+    <description>
+      Capture the current AprilTag pose and request a MoveIt plan to the captured pose.
+    </description>
+  </class>
+</library>

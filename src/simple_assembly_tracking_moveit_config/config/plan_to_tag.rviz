@@ -1,4 +1,8 @@
 Panels:
+  - Class: cove_rviz_plugins/PlanToTagPanel
+    Name: Plan To Tag
+    Capture Topic: /apriltag/capture_tag
+    Plan Topic: /apriltag/plan_captured_tag
   - Class: rviz_common/Displays
     Name: Displays
     Property Tree Widget:
@@ -8,7 +12,6 @@ Panels:
         - /AprilTag Marker1
         - /Captured Tag1
         - /Plan Goal1
-        - /Plan Button1
   - Class: rviz_common/Help
     Name: Help
   - Class: rviz_common/Views
@@ -53,14 +56,6 @@ Visualization Manager:
       Topic:
         Value: /apriltag/plan_goal_marker
       Value: true
-    - Class: rviz_default_plugins/InteractiveMarkers
-      Name: Plan Button
-      Show Axes: false
-      Show Descriptions: true
-      Show Visual Aids: false
-      Update Topic:
-        Value: /plan_to_tag_button/update
-      Value: true
     - Class: moveit_rviz_plugin/MotionPlanning
       Name: MotionPlanning
       Planned Path:
@@ -84,15 +79,6 @@ Visualization Manager:
     - Class: rviz_default_plugins/Interact
     - Class: rviz_default_plugins/MoveCamera
     - Class: rviz_default_plugins/Select
-    - Class: rviz_default_plugins/PublishPoint
-      Single click: true
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        Filter size: 10
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /apriltag/plan_to_tag_point
   Value: true
   Views:
     Current:
