@@ -3,11 +3,12 @@ project(simple_assembly_tracking)
 
 find_package(ament_cmake REQUIRED)
 
-install(DIRECTORY config urdf DESTINATION share/${PROJECT_NAME})
+install(DIRECTORY config launch urdf DESTINATION share/${PROJECT_NAME})
 install(
   PROGRAMS
     nodes/tag_tracker.py
     nodes/autotune_sweep.py
+    nodes/plan_to_tag.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
