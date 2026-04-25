@@ -40,6 +40,10 @@ class TagTfMarker(Node):
             self.declare_parameter("show_tag_face", False).value
         )
         self.show_label = bool(self.declare_parameter("show_label", False).value)
+        self.show_dummy_object = bool(
+            self.declare_parameter("show_dummy_object", True).value
+        )
+        self.dummy_frame = str(self.declare_parameter("dummy_frame", "root").value)
 
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
@@ -52,6 +56,8 @@ class TagTfMarker(Node):
 
     def publish_marker(self) -> None:
         markers = []
+        if self.show_dummy_object:
+            markers.append(self._dummy_marker())
         first_error = None
         for index, tag_frame in enumerate(self.tag_frames):
             try:
@@ -75,6 +81,29 @@ class TagTfMarker(Node):
             return
 
         self.pub.publish(MarkerArray(markers=markers))
+
+    def _dummy_marker(self):
+        stamp = self.get_clock().now().to_msg()
+        marker = Marker()
+        marker.header.frame_id = self.dummy_frame
+        marker.header.stamp = stamp
+        marker.ns = "tracked_object_debug"
+        marker.id = 9990
+        marker.type = Marker.CUBE
+        marker.action = Marker.ADD
+        marker.pose.position.x = 0.35
+        marker.pose.position.y = 0.0
+        marker.pose.position.z = 0.25
+        marker.pose.orientation.w = 1.0
+        marker.scale.x = 0.14
+        marker.scale.y = 0.10
+        marker.scale.z = 0.08
+        marker.color.r = 0.1
+        marker.color.g = 0.5
+        marker.color.b = 1.0
+        marker.color.a = 0.95
+        marker.frame_locked = True
+        return marker
 
     def _markers_for_transform(self, index, tag_frame):
         stamp = self.get_clock().now().to_msg()
