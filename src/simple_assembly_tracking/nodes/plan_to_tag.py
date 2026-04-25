@@ -59,7 +59,10 @@ class PlanToTag(Node):
             self.declare_parameter("approach_distance", 0.20).value
         )
         self.max_plan_step = float(
-            self.declare_parameter("max_plan_step", 0.05).value
+            self.declare_parameter("max_plan_step", 0.0).value
+        )
+        self.ik_search_samples = int(
+            self.declare_parameter("ik_search_samples", 20).value
         )
         self.tag_size = float(self.declare_parameter("tag_size", 0.162).value)
         self.goal_tolerance = float(
@@ -101,11 +104,14 @@ class PlanToTag(Node):
             Marker, "/apriltag/captured_tag_marker", 10
         )
         self.captured_tag_pose = None
+        self.captured_camera_start_pose = None
         self.captured_target_pose = None
         self.captured_camera_target_pose = None
         self.captured_desired_camera_pose = None
         self.captured_plan_step = None
         self.captured_range = None
+        self.captured_target_link_orientation = None
+        self.captured_target_to_camera_offset = None
         self.latest_joint_state = None
 
         self.create_subscription(Empty, "/apriltag/plan_to_tag", self.on_trigger, 10)
@@ -253,58 +259,75 @@ class PlanToTag(Node):
         camera_target.position.z = tag.z + dz * scale
         camera_target.orientation = camera_tf.transform.rotation
         desired_camera_target = camera_target
-        camera_target, plan_step = self._clamp_camera_target(
-            camera_tf.transform.translation,
-            desired_camera_target,
-        )
 
-        target = Pose()
-        if self.target_link == self.camera_frame:
-            target = camera_target
-        else:
-            offset = target_to_camera_tf.transform.translation
-            target.orientation = target_link_tf.transform.rotation
-            ox, oy, oz = self._rotate_vector(target.orientation, offset)
-            target.position.x = camera_target.position.x - ox
-            target.position.y = camera_target.position.y - oy
-            target.position.z = camera_target.position.z - oz
+        camera_start = Pose()
+        camera_start.position.x = camera.x
+        camera_start.position.y = camera.y
+        camera_start.position.z = camera.z
+        camera_start.orientation = camera_tf.transform.rotation
+
+        target_orientation = camera_tf.transform.rotation
+        target_offset = None
+        if self.target_link != self.camera_frame:
+            target_orientation = target_link_tf.transform.rotation
+            target_offset = target_to_camera_tf.transform.translation
+
+        full_step = self._pose_distance(camera_start, desired_camera_target)
+        search_step = self._search_step(full_step)
+        camera_target = self._interpolate_pose(camera_start, desired_camera_target, search_step)
+        target = self._target_pose_from_camera_pose(camera_target, target_orientation, target_offset)
 
         self.captured_tag_pose = captured_tag
+        self.captured_camera_start_pose = camera_start
         self.captured_target_pose = target
         self.captured_camera_target_pose = camera_target
         self.captured_desired_camera_pose = desired_camera_target
-        self.captured_plan_step = plan_step
+        self.captured_plan_step = search_step
         self.captured_range = norm
+        self.captured_target_link_orientation = target_orientation
+        self.captured_target_to_camera_offset = target_offset
         self._publish_captured_marker()
-        self._publish_goal_marker(camera_target)
-        full_step = max(norm - self.approach_distance, 0.0)
+        self._publish_goal_marker(desired_camera_target)
         self.get_logger().info(
             f"{source} capture: froze {self.tag_frame} at "
             f"({captured_tag.position.x:.3f}, {captured_tag.position.y:.3f}, {captured_tag.position.z:.3f}) "
             f"in {self.fixed_frame}; range={norm:.3f}m; "
-            f"plan_step={plan_step:.3f}m full_approach_step={full_step:.3f}m"
+            f"search_limit={search_step:.3f}m full_approach_step={full_step:.3f}m"
         )
         return True
 
     def plan_captured(self, source: str) -> None:
-        if self.captured_target_pose is None:
+        if self.captured_desired_camera_pose is None or self.captured_camera_start_pose is None:
             self.get_logger().warn("No captured tag pose yet. Press CAPTURE TAG first.")
             return
 
-        target = self.captured_target_pose
         self._publish_captured_marker()
-        self._publish_goal_marker(self.captured_camera_target_pose)
+        self._publish_goal_marker(self.captured_desired_camera_pose)
         self.get_logger().info(
-            f"{source} plan: planning {self.target_link} to captured target "
-            f"({target.position.x:.3f}, {target.position.y:.3f}, {target.position.z:.3f}) "
+            f"{source} plan: searching closest reachable {self.target_link} target "
             f"in {self.fixed_frame}; captured range={self.captured_range:.3f}m "
-            f"step={self.captured_plan_step:.3f}m"
+            f"search_limit={self.captured_plan_step:.3f}m"
         )
 
         if not self.ik_client.wait_for_service(timeout_sec=2.0):
             self.get_logger().error(f"MoveIt IK service not available: {self.ik_service}")
             return
 
+        candidates = self._ik_candidates()
+        if not candidates:
+            self.get_logger().warn("No IK candidates generated for captured tag")
+            return
+
+        self._try_ik_candidates(candidates, source, 0)
+
+    def _try_ik_candidates(self, candidates, source: str, index: int) -> None:
+        if index >= len(candidates):
+            self.get_logger().error(
+                "MoveIt IK could not find any reachable pose along the captured approach line"
+            )
+            return
+
+        camera_target, target, step = candidates[index]
         request = GetPositionIK.Request()
         request.ik_request.group_name = self.group_name
         request.ik_request.ik_link_name = self.target_link
@@ -318,9 +341,28 @@ class PlanToTag(Node):
             request.ik_request.robot_state.is_diff = True
 
         future = self.ik_client.call_async(request)
-        future.add_done_callback(lambda result: self._on_ik_result(result, source))
+        future.add_done_callback(
+            lambda result: self._on_ik_result(
+                result,
+                source,
+                candidates,
+                index,
+                camera_target,
+                target,
+                step,
+            )
+        )
 
-    def _on_ik_result(self, future, source: str) -> None:
+    def _on_ik_result(
+        self,
+        future,
+        source: str,
+        candidates,
+        index: int,
+        camera_target: Pose,
+        target: Pose,
+        step: float,
+    ) -> None:
         try:
             result = future.result()
         except Exception as exc:
@@ -329,10 +371,11 @@ class PlanToTag(Node):
 
         code = result.error_code.val
         if code != MoveItErrorCodes.SUCCESS:
-            self.get_logger().error(
-                f"MoveIt IK failed for captured tag: error_code={code} "
-                f"message='{result.error_code.message}'"
-            )
+            if index == 0:
+                self.get_logger().warn(
+                    f"Ideal captured pose is not IK-solvable; backing off from step={step:.3f}m"
+                )
+            self._try_ik_candidates(candidates, source, index + 1)
             return
 
         joints = self._selected_joint_positions(result.solution.joint_state)
@@ -344,8 +387,13 @@ class PlanToTag(Node):
             )
             return
 
+        self.captured_camera_target_pose = camera_target
+        self.captured_target_pose = target
+        self.captured_plan_step = step
+        self._publish_goal_marker(camera_target)
         self.get_logger().info(
-            f"MoveIt IK solved captured tag target; planning joint-space path from {source}"
+            f"MoveIt IK selected closest reachable target at step={step:.3f}m "
+            f"after {index + 1} attempt(s); planning joint-space path from {source}"
         )
         self._send_joint_goal(joints)
 
@@ -376,25 +424,71 @@ class PlanToTag(Node):
         msg.nanosec = int((seconds - whole) * 1_000_000_000)
         return msg
 
-    def _clamp_camera_target(self, camera_position, desired: Pose):
-        dx = desired.position.x - camera_position.x
-        dy = desired.position.y - camera_position.y
-        dz = desired.position.z - camera_position.z
-        distance = math.sqrt(dx * dx + dy * dy + dz * dz)
-        if distance < 1e-6:
-            return desired, 0.0
+    def _ik_candidates(self):
+        full_step = self._pose_distance(
+            self.captured_camera_start_pose,
+            self.captured_desired_camera_pose,
+        )
+        search_step = self._search_step(full_step)
+        samples = max(self.ik_search_samples, 1)
+        candidates = []
+        seen = set()
+        for index in range(samples + 1):
+            fraction = 1.0 - (index / samples)
+            step = search_step * fraction
+            key = round(step, 5)
+            if key in seen:
+                continue
+            seen.add(key)
+            camera_target = self._interpolate_pose(
+                self.captured_camera_start_pose,
+                self.captured_desired_camera_pose,
+                step,
+            )
+            target = self._target_pose_from_camera_pose(
+                camera_target,
+                self.captured_target_link_orientation,
+                self.captured_target_to_camera_offset,
+            )
+            candidates.append((camera_target, target, step))
+        return candidates
 
+    def _search_step(self, full_step: float) -> float:
         max_step = max(self.max_plan_step, 0.0)
-        if max_step == 0.0 or distance <= max_step:
-            return desired, distance
+        if max_step <= 0.0:
+            return full_step
+        return min(full_step, max_step)
 
-        scale = max_step / distance
-        clamped = Pose()
-        clamped.position.x = camera_position.x + dx * scale
-        clamped.position.y = camera_position.y + dy * scale
-        clamped.position.z = camera_position.z + dz * scale
-        clamped.orientation = desired.orientation
-        return clamped, max_step
+    def _pose_distance(self, start: Pose, end: Pose) -> float:
+        dx = end.position.x - start.position.x
+        dy = end.position.y - start.position.y
+        dz = end.position.z - start.position.z
+        return math.sqrt(dx * dx + dy * dy + dz * dz)
+
+    def _interpolate_pose(self, start: Pose, end: Pose, step: float) -> Pose:
+        full_step = self._pose_distance(start, end)
+        if full_step < 1e-6:
+            return end
+
+        ratio = max(0.0, min(step / full_step, 1.0))
+        pose = Pose()
+        pose.position.x = start.position.x + (end.position.x - start.position.x) * ratio
+        pose.position.y = start.position.y + (end.position.y - start.position.y) * ratio
+        pose.position.z = start.position.z + (end.position.z - start.position.z) * ratio
+        pose.orientation = end.orientation
+        return pose
+
+    def _target_pose_from_camera_pose(self, camera_pose: Pose, target_orientation, offset) -> Pose:
+        if self.target_link == self.camera_frame or offset is None:
+            return camera_pose
+
+        target = Pose()
+        target.orientation = target_orientation
+        ox, oy, oz = self._rotate_vector(target.orientation, offset)
+        target.position.x = camera_pose.position.x - ox
+        target.position.y = camera_pose.position.y - oy
+        target.position.z = camera_pose.position.z - oz
+        return target
 
     def _lookup(self, target_frame: str, source_frame: str):
         try:
