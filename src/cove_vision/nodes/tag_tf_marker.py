@@ -49,6 +49,7 @@ class TagTfMarker(Node):
         )
 
         self.active_tag_frames = {}
+        self.last_logged_tag_ids = ()
         self.create_subscription(
             AprilTagDetectionArray,
             self.detections_topic,
@@ -65,10 +66,19 @@ class TagTfMarker(Node):
     def on_detections(self, msg: AprilTagDetectionArray) -> None:
         now_ns = self.get_clock().now().nanoseconds
         valid_frames = set(self.tag_frames)
+        detected_tag_ids = []
         for detection in msg.detections:
             tag_frame = f"tag_{int(detection.id)}"
             if tag_frame in valid_frames:
                 self.active_tag_frames[tag_frame] = now_ns
+                detected_tag_ids.append(int(detection.id))
+
+        detected_tag_ids = tuple(sorted(detected_tag_ids))
+        if detected_tag_ids and detected_tag_ids != self.last_logged_tag_ids:
+            self.get_logger().info(
+                f"Detected AprilTag ids: {', '.join(str(tag_id) for tag_id in detected_tag_ids)}"
+            )
+        self.last_logged_tag_ids = detected_tag_ids
 
     def publish_marker(self) -> None:
         markers = []
