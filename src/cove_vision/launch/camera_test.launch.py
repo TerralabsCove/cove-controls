@@ -34,7 +34,7 @@ def generate_launch_description():
                         "framerate": LaunchConfiguration("framerate"),
                         "pixel_format": LaunchConfiguration("pixel_format"),
                         "camera_name": LaunchConfiguration("camera_name"),
-                        "camera_frame_id": LaunchConfiguration("camera_frame_id"),
+                        "frame_id": LaunchConfiguration("camera_frame_id"),
                     },
                 ],
             ),

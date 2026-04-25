@@ -83,7 +83,7 @@ def generate_launch_description():
                 camera_params,
                 {
                     "video_device": LaunchConfiguration("video_device"),
-                    "camera_frame_id": LaunchConfiguration("camera_frame_id"),
+                    "frame_id": LaunchConfiguration("camera_frame_id"),
                 },
             ],
         )
