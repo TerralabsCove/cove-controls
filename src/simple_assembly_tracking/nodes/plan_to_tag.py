@@ -3,14 +3,12 @@
 
 import math
 
-from builtin_interfaces.msg import Duration as DurationMsg
 from geometry_msgs.msg import PointStamped, Pose
 from interactive_markers import InteractiveMarkerServer
 import rclpy
 from moveit_msgs.action import MoveGroup
-from moveit_msgs.msg import Constraints, DisplayTrajectory, JointConstraint, MoveItErrorCodes
+from moveit_msgs.msg import Constraints, DisplayTrajectory, MoveItErrorCodes
 from moveit_msgs.msg import MotionPlanRequest, PlanningOptions, PositionConstraint
-from moveit_msgs.srv import GetPositionIK
 from rclpy.action import ActionClient
 from rclpy.duration import Duration
 from rclpy.node import Node
@@ -19,17 +17,6 @@ from shape_msgs.msg import SolidPrimitive
 from std_msgs.msg import Empty
 from tf2_ros import Buffer, TransformException, TransformListener
 from visualization_msgs.msg import InteractiveMarker, InteractiveMarkerControl, Marker
-
-
-ARM_JOINTS = [
-    "revolute_1_0",
-    "revolute_2_0",
-    "revolute_3_0",
-    "revolute_4_0",
-    "revolute_5_0",
-    "revolute_6_0",
-    "revolute_7_0",
-]
 
 
 class PlanToTag(Node):
@@ -48,13 +35,7 @@ class PlanToTag(Node):
         self.move_action = str(
             self.declare_parameter("move_action", "/move_action").value
         )
-        self.ik_service = str(
-            self.declare_parameter("ik_service", "/compute_ik").value
-        )
         self.execute = bool(self.declare_parameter("execute", False).value)
-        self.arm_joint_names = list(
-            self.declare_parameter("arm_joint_names", ARM_JOINTS).value
-        )
         self.approach_distance = float(
             self.declare_parameter("approach_distance", 0.0).value
         )
@@ -74,10 +55,6 @@ class PlanToTag(Node):
         self.allowed_planning_time = float(
             self.declare_parameter("allowed_planning_time", 5.0).value
         )
-        self.ik_timeout = float(self.declare_parameter("ik_timeout", 1.0).value)
-        self.joint_goal_tolerance = float(
-            self.declare_parameter("joint_goal_tolerance", 0.015).value
-        )
         self.velocity_scale = float(
             self.declare_parameter("velocity_scale", 0.10).value
         )
@@ -94,7 +71,6 @@ class PlanToTag(Node):
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
         self.move_group = ActionClient(self, MoveGroup, self.move_action)
-        self.ik_client = self.create_client(GetPositionIK, self.ik_service)
         self.button_server = InteractiveMarkerServer(self, "plan_to_tag_button")
 
         self.display_pub = self.create_publisher(
@@ -309,23 +285,19 @@ class PlanToTag(Node):
         self._publish_captured_marker()
         self._clear_goal_marker()
         self.get_logger().info(
-            f"{source} plan: searching closest plannable {self.target_link} target "
+            f"{source} plan: sending captured {self.target_link} coordinate to MoveIt "
             f"in {self.fixed_frame}; captured range={self.captured_range:.3f}m "
             f"target_step={self.captured_plan_step:.3f}m"
         )
 
-        if not self.ik_client.wait_for_service(timeout_sec=2.0):
-            self.get_logger().error(f"MoveIt IK service not available: {self.ik_service}")
-            return
-
-        candidates = self._ik_candidates()
+        candidates = self._plan_candidates()
         if not candidates:
-            self.get_logger().warn("No IK candidates generated for captured tag")
+            self.get_logger().warn("No MoveIt goal candidates generated for captured tag")
             return
 
-        self._try_ik_candidates(candidates, source, 0)
+        self._try_moveit_candidates(candidates, source, 0)
 
-    def _try_ik_candidates(
+    def _try_moveit_candidates(
         self,
         candidates,
         source: str,
@@ -333,102 +305,22 @@ class PlanToTag(Node):
     ) -> None:
         if index >= len(candidates):
             self.get_logger().error(
-                "MoveIt could not find any plannable pose toward the captured tag"
+                "MoveIt could not find any plannable coordinate toward the captured tag"
             )
             return
 
         camera_target, target, step = candidates[index]
-        request = GetPositionIK.Request()
-        request.ik_request.group_name = self.group_name
-        request.ik_request.ik_link_name = self.target_link
-        request.ik_request.pose_stamped.header.frame_id = self.fixed_frame
-        request.ik_request.pose_stamped.header.stamp = self.get_clock().now().to_msg()
-        request.ik_request.pose_stamped.pose = target
-        request.ik_request.avoid_collisions = False
-        request.ik_request.timeout = self._duration_msg(self.ik_timeout)
-        if self.latest_joint_state is not None:
-            request.ik_request.robot_state.joint_state = self.latest_joint_state
-            request.ik_request.robot_state.is_diff = True
-
-        future = self.ik_client.call_async(request)
-        future.add_done_callback(
-            lambda result: self._on_ik_result(
-                result,
-                source,
-                candidates,
-                index,
-                camera_target,
-                target,
-                step,
-            )
-        )
-
-    def _on_ik_result(
-        self,
-        future,
-        source: str,
-        candidates,
-        index: int,
-        camera_target: Pose,
-        target: Pose,
-        step: float,
-    ) -> None:
-        try:
-            result = future.result()
-        except Exception as exc:
-            self.get_logger().error(f"MoveIt IK request failed: {exc}")
-            return
-
-        code = result.error_code.val
-        if code != MoveItErrorCodes.SUCCESS:
-            if index == 0:
-                self.get_logger().warn(
-                    f"Ideal captured pose is not IK-solvable; backing off from step={step:.3f}m"
-                )
-            self._try_ik_candidates(candidates, source, index + 1)
-            return
-
-        joints = self._selected_joint_positions(result.solution.joint_state)
-        if len(joints) != len(self.arm_joint_names):
-            found = ", ".join(name for name, _ in joints) or "none"
-            expected = ", ".join(self.arm_joint_names)
-            self.get_logger().warn(
-                f"MoveIt IK returned incomplete arm joint state for step={step:.3f}m. "
-                f"found=[{found}] expected=[{expected}]; trying next candidate"
-            )
-            self._try_ik_candidates(candidates, source, index + 1)
-            return
-
         self.get_logger().info(
-            f"MoveIt IK solved candidate step={step:.3f}m after {index + 1} attempt(s); "
-            "checking MoveGroup plan"
-        )
-        self._send_joint_goal(
-            joints,
-            source=source,
-            candidates=candidates,
-            index=index,
-            camera_target=camera_target,
-            target=target,
-            step=step,
+            f"MoveIt planning to coordinate candidate step={step:.3f}m "
+            f"attempt={index + 1}/{len(candidates)}"
         )
 
-    def _send_joint_goal(
-        self,
-        joints,
-        source: str = "",
-        candidates=None,
-        index: int = 0,
-        camera_target: Pose = None,
-        target: Pose = None,
-        step: float = 0.0,
-    ) -> None:
         if not self.move_group.wait_for_server(timeout_sec=2.0):
             self.get_logger().error(f"MoveGroup action server not available: {self.move_action}")
             return
 
         goal = MoveGroup.Goal()
-        goal.request = self._joint_motion_plan_request(joints)
+        goal.request = self._motion_plan_request(camera_target)
         goal.planning_options = self._planning_options()
 
         future = self.move_group.send_goal_async(goal)
@@ -444,22 +336,7 @@ class PlanToTag(Node):
             )
         )
 
-    def _selected_joint_positions(self, joint_state: JointState):
-        by_name = dict(zip(joint_state.name, joint_state.position))
-        return [
-            (name, by_name[name])
-            for name in self.arm_joint_names
-            if name in by_name
-        ]
-
-    def _duration_msg(self, seconds: float) -> DurationMsg:
-        whole = int(seconds)
-        msg = DurationMsg()
-        msg.sec = whole
-        msg.nanosec = int((seconds - whole) * 1_000_000_000)
-        return msg
-
-    def _ik_candidates(self):
+    def _plan_candidates(self):
         full_step = self._pose_distance(
             self.captured_camera_start_pose,
             self.captured_desired_camera_pose,
@@ -557,21 +434,6 @@ class PlanToTag(Node):
         if self.latest_joint_state is not None:
             request.start_state.joint_state = self.latest_joint_state
             request.start_state.is_diff = True
-        return request
-
-    def _joint_motion_plan_request(self, joints) -> MotionPlanRequest:
-        request = self._base_motion_plan_request()
-        constraints = Constraints()
-        constraints.name = f"{self.tag_frame}_captured_ik"
-        for name, position in joints:
-            joint = JointConstraint()
-            joint.joint_name = name
-            joint.position = position
-            joint.tolerance_above = self.joint_goal_tolerance
-            joint.tolerance_below = self.joint_goal_tolerance
-            joint.weight = 1.0
-            constraints.joint_constraints.append(joint)
-        request.goal_constraints.append(constraints)
         return request
 
     def _motion_plan_request(self, target: Pose) -> MotionPlanRequest:
@@ -707,7 +569,7 @@ class PlanToTag(Node):
                 self.get_logger().warn(
                     f"MoveGroup rejected candidate step={step:.3f}m; trying next candidate"
                 )
-                self._try_ik_candidates(candidates, source, index + 1)
+                self._try_moveit_candidates(candidates, source, index + 1)
             else:
                 self.get_logger().error("MoveGroup rejected the plan-to-tag request")
             return
@@ -744,7 +606,7 @@ class PlanToTag(Node):
                     f"MoveGroup failed candidate step={step:.3f}m: error_code={code}; "
                     "trying next candidate"
                 )
-                self._try_ik_candidates(candidates, source, index + 1)
+                self._try_moveit_candidates(candidates, source, index + 1)
             else:
                 self.get_logger().error(
                     f"MoveGroup failed plan-to-tag request: error_code={code}"
