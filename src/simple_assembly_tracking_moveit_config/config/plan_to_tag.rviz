@@ -3,7 +3,6 @@ Panels:
     Name: Plan To Tag
     Capture Topic: /apriltag/capture_tag
     Plan Topic: /apriltag/plan_captured_tag
-    Execute Topic: /apriltag/execute_captured_tag
   - Class: rviz_common/Displays
     Name: Displays
     Property Tree Widget:
