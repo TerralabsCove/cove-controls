@@ -10,17 +10,6 @@ from moveit_configs_utils import MoveItConfigsBuilder
 
 
 def generate_launch_description():
-    moveit_config = (
-        MoveItConfigsBuilder(
-            "simple_assembly_tracking",
-            package_name="simple_assembly_tracking_moveit_config",
-        )
-        .robot_description(file_path="config/simple_assembly_tracking.urdf.xacro")
-        .robot_description_semantic(file_path="config/simple_assembly_tracking.srdf")
-        .to_moveit_configs()
-    )
-
-    pkg = moveit_config.package_path
     ld = LaunchDescription()
 
     ld.add_action(DeclareLaunchArgument("video_device", default_value="/dev/video0"))
@@ -34,6 +23,30 @@ def generate_launch_description():
     ld.add_action(DeclareLaunchArgument("deadband_px", default_value="25.0"))
     ld.add_action(DeclareLaunchArgument("trajectory_duration", default_value="0.15"))
     ld.add_action(DeclareLaunchArgument("enable_tracker", default_value="false"))
+    ld.add_action(DeclareLaunchArgument("calibrate_on_start", default_value="false"))
+    ld.add_action(
+        DeclareLaunchArgument(
+            "zero_offsets_file",
+            default_value="/home/terralabscove/.ros/damiao_zero_offsets.yaml",
+        )
+    )
+
+    moveit_config = (
+        MoveItConfigsBuilder(
+            "simple_assembly_tracking",
+            package_name="simple_assembly_tracking_moveit_config",
+        )
+        .robot_description(
+            file_path="config/simple_assembly_tracking.urdf.xacro",
+            mappings={
+                "calibrate_on_start": LaunchConfiguration("calibrate_on_start"),
+                "zero_offsets_file": LaunchConfiguration("zero_offsets_file"),
+            },
+        )
+        .robot_description_semantic(file_path="config/simple_assembly_tracking.srdf")
+        .to_moveit_configs()
+    )
+    pkg = moveit_config.package_path
 
     # --- Robot stack ---
     ld.add_action(

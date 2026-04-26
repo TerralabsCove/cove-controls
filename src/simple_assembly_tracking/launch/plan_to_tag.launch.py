@@ -23,18 +23,25 @@ def generate_launch_description():
             DeclareLaunchArgument("tag_id", default_value="0"),
             DeclareLaunchArgument("tag_frame", default_value="tag_0"),
             DeclareLaunchArgument("approach_distance", default_value="0.20"),
-            DeclareLaunchArgument("proxy_plan_step", default_value="0.25"),
-            DeclareLaunchArgument("max_plan_step", default_value="0.25"),
+            DeclareLaunchArgument("proxy_plan_step", default_value="0.0"),
+            DeclareLaunchArgument("max_plan_step", default_value="0.0"),
             DeclareLaunchArgument("ik_search_samples", default_value="10"),
             DeclareLaunchArgument("goal_tolerance", default_value="0.04"),
             DeclareLaunchArgument("target_link", default_value="wrist_link"),
             DeclareLaunchArgument("execute", default_value="false"),
+            DeclareLaunchArgument("calibrate_on_start", default_value="false"),
+            DeclareLaunchArgument(
+                "zero_offsets_file",
+                default_value="/home/terralabscove/.ros/damiao_zero_offsets.yaml",
+            ),
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(robot_launch),
                 launch_arguments={
                     "video_device": LaunchConfiguration("video_device"),
                     "tag_id": LaunchConfiguration("tag_id"),
                     "enable_tracker": "false",
+                    "calibrate_on_start": LaunchConfiguration("calibrate_on_start"),
+                    "zero_offsets_file": LaunchConfiguration("zero_offsets_file"),
                 }.items(),
             ),
             TimerAction(

@@ -26,7 +26,7 @@ arm_controller:
       - position
       - velocity
     allow_nonzero_velocity_at_trajectory_end: false
-    open_loop_control: true
+    open_loop_control: false
     constraints:
       goal_time: 0.0
       stopped_velocity_tolerance: 0.0

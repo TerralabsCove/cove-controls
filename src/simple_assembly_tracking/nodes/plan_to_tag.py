@@ -59,7 +59,7 @@ class PlanToTag(Node):
             self.declare_parameter("approach_distance", 0.20).value
         )
         self.proxy_plan_step = float(
-            self.declare_parameter("proxy_plan_step", 0.25).value
+            self.declare_parameter("proxy_plan_step", 0.0).value
         )
         self.max_plan_step = float(
             self.declare_parameter("max_plan_step", self.proxy_plan_step).value
@@ -138,7 +138,7 @@ class PlanToTag(Node):
         self.get_logger().info(
             "PlanToTag ready "
             f"mode={mode} group={self.group_name} target_link={self.target_link} "
-            f"proxy_plan_step={self.proxy_plan_step:.3f}m max_plan_step={self.max_plan_step:.3f}m "
+            f"target_step_limit={self.max_plan_step:.3f}m "
             f"tag={self.tag_frame} capture=/apriltag/capture_tag "
             "plan=/apriltag/plan_captured_tag execute=/apriltag/execute_captured_tag "
             "rviz_buttons=/plan_to_tag_button"
@@ -303,7 +303,7 @@ class PlanToTag(Node):
             f"{source} capture: froze {self.tag_frame} at "
             f"({captured_tag.position.x:.3f}, {captured_tag.position.y:.3f}, {captured_tag.position.z:.3f}) "
             f"in {self.fixed_frame}; range={norm:.3f}m; "
-            f"proxy_step={search_step:.3f}m full_approach_step={full_step:.3f}m"
+            f"target_step={search_step:.3f}m full_approach_step={full_step:.3f}m"
         )
         return True
 
@@ -315,9 +315,9 @@ class PlanToTag(Node):
         self._publish_captured_marker()
         self._clear_goal_marker()
         self.get_logger().info(
-            f"{source} plan: searching closest plannable proxy {self.target_link} target "
+            f"{source} plan: searching closest plannable {self.target_link} target "
             f"in {self.fixed_frame}; captured range={self.captured_range:.3f}m "
-            f"proxy_step={self.captured_plan_step:.3f}m "
+            f"target_step={self.captured_plan_step:.3f}m "
             f"mode={'execute' if execute_request else 'plan-only'}"
         )
 
@@ -341,7 +341,7 @@ class PlanToTag(Node):
     ) -> None:
         if index >= len(candidates):
             self.get_logger().error(
-                "MoveIt could not find any plannable proxy pose toward the captured tag"
+                "MoveIt could not find any plannable pose toward the captured tag"
             )
             return
 

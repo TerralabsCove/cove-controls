@@ -3,6 +3,7 @@
 
 #include <atomic>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
@@ -50,6 +51,8 @@ private:
 
   // Control mode
   std::string control_mode_;
+  std::string zero_offsets_file_;
+  bool calibrate_on_start_{false};
 
   // State mirrors (what we last read from hardware)
   std::vector<double> hw_positions_;
@@ -64,6 +67,12 @@ private:
   // Logical position = motor_pos - zero_offsets_[i]
   // Motor command    = logical_cmd + zero_offsets_[i]
   std::vector<double> zero_offsets_;
+  std::mutex motor_mutex_;
+
+  bool load_zero_offsets();
+  bool save_zero_offsets();
+  bool capture_zero_offsets();
+  std::string zero_offsets_string() const;
 
   // Background motor init — keeps on_activate non-blocking
   std::thread init_thread_;
