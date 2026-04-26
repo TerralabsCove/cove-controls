@@ -22,7 +22,7 @@ def generate_launch_description():
             DeclareLaunchArgument("tag_size", default_value="0.162"),
             DeclareLaunchArgument("tag_id", default_value="0"),
             DeclareLaunchArgument("tag_frame", default_value="tag_0"),
-            DeclareLaunchArgument("approach_distance", default_value="0.20"),
+            DeclareLaunchArgument("approach_distance", default_value="0.05"),
             DeclareLaunchArgument("proxy_plan_step", default_value="0.0"),
             DeclareLaunchArgument("max_plan_step", default_value="0.0"),
             DeclareLaunchArgument("ik_search_samples", default_value="10"),
