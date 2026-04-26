@@ -44,6 +44,9 @@ class WaypointRunner(Node):
         self.goal_tolerance = float(
             self.declare_parameter("goal_tolerance", 0.04).value
         )
+        self.min_z = float(
+            self.declare_parameter("min_z", 0.0565).value
+        )
         self.velocity_scale = float(
             self.declare_parameter("velocity_scale", 0.3).value
         )
@@ -102,6 +105,14 @@ class WaypointRunner(Node):
             return
 
         name, x, y, z = WAYPOINTS[self.current_index]
+
+        if z < self.min_z:
+            self.get_logger().error(
+                f"Waypoint '{name}' z={z:.4f} is below min_z={self.min_z:.4f} "
+                "(height of revolute_1_0) — refusing to execute"
+            )
+            return
+
         self.get_logger().info(
             f"{source}: executing waypoint {self.current_index + 1}/{len(WAYPOINTS)} "
             f"'{name}' → ({x:.3f}, {y:.3f}, {z:.3f})"
