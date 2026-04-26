@@ -64,10 +64,8 @@ class PlanToTag(Node):
         self.rviz_goal_pub = self.create_publisher(
             RobotState, "/rviz/moveit/update_custom_goal_state", 10
         )
-        self.rviz_plan_pub = self.create_publisher(Empty, "/rviz/moveit/plan", 10)
-        self.goal_marker_pub = self.create_publisher(
-            Marker, "/apriltag/plan_goal_marker", 10
-        )
+        plan_topic = "/rviz/moveit/plan_and_execute" if self.execute else "/rviz/moveit/plan"
+        self.rviz_plan_pub = self.create_publisher(Empty, plan_topic, 10)
         self.captured_marker_pub = self.create_publisher(
             Marker, "/apriltag/captured_tag_marker", 10
         )
@@ -257,7 +255,6 @@ class PlanToTag(Node):
         self.captured_target_link_orientation = target_orientation
         self.captured_target_to_camera_offset = target_offset
         self._publish_captured_marker()
-        self._clear_goal_marker()
         self.get_logger().info(
             f"{source} capture: froze {self.tag_frame} at "
             f"({captured_tag.position.x:.3f}, {captured_tag.position.y:.3f}, {captured_tag.position.z:.3f}) "
@@ -272,7 +269,6 @@ class PlanToTag(Node):
             return
 
         self._publish_captured_marker()
-        self._clear_goal_marker()
         self.get_logger().info(
             f"{source} plan: solving captured {self.target_link} coordinate for RViz MotionPlanning "
             f"in {self.fixed_frame}; captured range={self.captured_range:.3f}m "
@@ -367,11 +363,10 @@ class PlanToTag(Node):
             self.captured_camera_target_pose = camera_target
             self.captured_target_pose = target
             self.captured_plan_step = step
-            self._publish_goal_marker(camera_target)
 
+        action = "plan_and_execute" if self.execute else "plan"
         self.get_logger().info(
-            f"Published RViz MotionPlanning goal state at step={step:.3f}m; "
-            "RViz should show the goal robot preview and run its normal Plan action"
+            f"Sent IK goal state to RViz MotionPlanning (step={step:.3f}m, action={action})"
         )
 
     def _plan_candidates(self):
@@ -483,33 +478,6 @@ class PlanToTag(Node):
         msg.sec = whole
         msg.nanosec = int((seconds - whole) * 1_000_000_000)
         return msg
-
-    def _publish_goal_marker(self, target: Pose) -> None:
-        marker = Marker()
-        marker.header.frame_id = self.fixed_frame
-        marker.header.stamp = self.get_clock().now().to_msg()
-        marker.ns = "plan_to_tag"
-        marker.id = 1
-        marker.type = Marker.SPHERE
-        marker.action = Marker.ADD
-        marker.pose = target
-        marker.scale.x = self.goal_tolerance * 2.0
-        marker.scale.y = self.goal_tolerance * 2.0
-        marker.scale.z = self.goal_tolerance * 2.0
-        marker.color.r = 0.2
-        marker.color.g = 1.0
-        marker.color.b = 0.2
-        marker.color.a = 0.85
-        self.goal_marker_pub.publish(marker)
-
-    def _clear_goal_marker(self) -> None:
-        marker = Marker()
-        marker.header.frame_id = self.fixed_frame
-        marker.header.stamp = self.get_clock().now().to_msg()
-        marker.ns = "plan_to_tag"
-        marker.id = 1
-        marker.action = Marker.DELETE
-        self.goal_marker_pub.publish(marker)
 
     def _publish_captured_marker(self) -> None:
         if self.captured_tag_pose is None:
