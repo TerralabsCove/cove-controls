@@ -63,6 +63,11 @@ Visualization Manager:
         Show Robot Visual: true
         State Display Time: 0.5 s
         Trajectory Topic: display_planned_path
+      Planning Request:
+        External Comm.: true
+        Planning Group: arm
+        Query Goal State: true
+        Query Start State: false
       Planning Scene Topic: monitored_planning_scene
       Robot Description: robot_description
       Scene Geometry:

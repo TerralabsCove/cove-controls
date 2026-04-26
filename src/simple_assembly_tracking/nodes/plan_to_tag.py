@@ -3,17 +3,15 @@
 
 import math
 
+from builtin_interfaces.msg import Duration as DurationMsg
 from geometry_msgs.msg import PointStamped, Pose
 from interactive_markers import InteractiveMarkerServer
 import rclpy
-from moveit_msgs.action import MoveGroup
-from moveit_msgs.msg import Constraints, DisplayTrajectory, MoveItErrorCodes
-from moveit_msgs.msg import MotionPlanRequest, PlanningOptions, PositionConstraint
-from rclpy.action import ActionClient
+from moveit_msgs.msg import MoveItErrorCodes, RobotState
+from moveit_msgs.srv import GetPositionIK
 from rclpy.duration import Duration
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
-from shape_msgs.msg import SolidPrimitive
 from std_msgs.msg import Empty
 from tf2_ros import Buffer, TransformException, TransformListener
 from visualization_msgs.msg import InteractiveMarker, InteractiveMarkerControl, Marker
@@ -32,8 +30,8 @@ class PlanToTag(Node):
             self.declare_parameter("target_link", "wrist_link").value
         )
         self.group_name = str(self.declare_parameter("group_name", "arm").value)
-        self.move_action = str(
-            self.declare_parameter("move_action", "/move_action").value
+        self.ik_service = str(
+            self.declare_parameter("ik_service", "/compute_ik").value
         )
         self.execute = bool(self.declare_parameter("execute", False).value)
         self.approach_distance = float(
@@ -52,30 +50,21 @@ class PlanToTag(Node):
         self.goal_tolerance = float(
             self.declare_parameter("goal_tolerance", 0.04).value
         )
-        self.allowed_planning_time = float(
-            self.declare_parameter("allowed_planning_time", 5.0).value
-        )
-        self.velocity_scale = float(
-            self.declare_parameter("velocity_scale", 0.10).value
-        )
-        self.acceleration_scale = float(
-            self.declare_parameter("acceleration_scale", 0.10).value
-        )
-        self.workspace_radius = float(
-            self.declare_parameter("workspace_radius", 2.0).value
-        )
+        self.ik_timeout = float(self.declare_parameter("ik_timeout", 1.0).value)
         self.button_x = float(self.declare_parameter("button_x", 0.35).value)
         self.button_y = float(self.declare_parameter("button_y", -0.25).value)
         self.button_z = float(self.declare_parameter("button_z", 0.45).value)
 
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
-        self.move_group = ActionClient(self, MoveGroup, self.move_action)
+        self.ik_client = self.create_client(GetPositionIK, self.ik_service)
         self.button_server = InteractiveMarkerServer(self, "plan_to_tag_button")
 
-        self.display_pub = self.create_publisher(
-            DisplayTrajectory, "/display_planned_path", 10
+        self.rviz_start_pub = self.create_publisher(Empty, "/rviz/moveit/update_start_state", 10)
+        self.rviz_goal_pub = self.create_publisher(
+            RobotState, "/rviz/moveit/update_custom_goal_state", 10
         )
+        self.rviz_plan_pub = self.create_publisher(Empty, "/rviz/moveit/plan", 10)
         self.goal_marker_pub = self.create_publisher(
             Marker, "/apriltag/plan_goal_marker", 10
         )
@@ -107,13 +96,13 @@ class PlanToTag(Node):
         self.create_subscription(JointState, "/joint_states", self.on_joint_state, 10)
         self._make_buttons()
 
-        mode = "plan+execute" if self.execute else "plan-only"
+        mode = "rviz-managed"
         self.get_logger().info(
             "PlanToTag ready "
             f"mode={mode} group={self.group_name} target_link={self.target_link} "
             f"target_step_limit={self.max_plan_step:.3f}m "
             f"tag={self.tag_frame} capture=/apriltag/capture_tag "
-            "plan=/apriltag/plan_captured_tag "
+            "plan=/apriltag/plan_captured_tag rviz_remote=/rviz/moveit "
             "rviz_buttons=/plan_to_tag_button"
         )
 
@@ -285,19 +274,23 @@ class PlanToTag(Node):
         self._publish_captured_marker()
         self._clear_goal_marker()
         self.get_logger().info(
-            f"{source} plan: sending captured {self.target_link} coordinate to MoveIt "
+            f"{source} plan: solving captured {self.target_link} coordinate for RViz MotionPlanning "
             f"in {self.fixed_frame}; captured range={self.captured_range:.3f}m "
             f"target_step={self.captured_plan_step:.3f}m"
         )
 
-        candidates = self._plan_candidates()
-        if not candidates:
-            self.get_logger().warn("No MoveIt goal candidates generated for captured tag")
+        if not self.ik_client.wait_for_service(timeout_sec=2.0):
+            self.get_logger().error(f"MoveIt IK service not available: {self.ik_service}")
             return
 
-        self._try_moveit_candidates(candidates, source, 0)
+        candidates = self._plan_candidates()
+        if not candidates:
+            self.get_logger().warn("No RViz goal candidates generated for captured tag")
+            return
 
-    def _try_moveit_candidates(
+        self._try_rviz_goal_candidates(candidates, source, 0)
+
+    def _try_rviz_goal_candidates(
         self,
         candidates,
         source: str,
@@ -305,27 +298,31 @@ class PlanToTag(Node):
     ) -> None:
         if index >= len(candidates):
             self.get_logger().error(
-                "MoveIt could not find any plannable coordinate toward the captured tag"
+                "MoveIt IK could not find a goal state toward the captured tag"
             )
             return
 
         camera_target, target, step = candidates[index]
         self.get_logger().info(
-            f"MoveIt planning to coordinate candidate step={step:.3f}m "
+            f"MoveIt IK solving RViz goal candidate step={step:.3f}m "
             f"attempt={index + 1}/{len(candidates)}"
         )
 
-        if not self.move_group.wait_for_server(timeout_sec=2.0):
-            self.get_logger().error(f"MoveGroup action server not available: {self.move_action}")
-            return
+        request = GetPositionIK.Request()
+        request.ik_request.group_name = self.group_name
+        request.ik_request.ik_link_name = self.target_link
+        request.ik_request.pose_stamped.header.frame_id = self.fixed_frame
+        request.ik_request.pose_stamped.header.stamp = self.get_clock().now().to_msg()
+        request.ik_request.pose_stamped.pose = target
+        request.ik_request.avoid_collisions = False
+        request.ik_request.timeout = self._duration_msg(self.ik_timeout)
+        if self.latest_joint_state is not None:
+            request.ik_request.robot_state.joint_state = self.latest_joint_state
+            request.ik_request.robot_state.is_diff = True
 
-        goal = MoveGroup.Goal()
-        goal.request = self._motion_plan_request(camera_target)
-        goal.planning_options = self._planning_options()
-
-        future = self.move_group.send_goal_async(goal)
+        future = self.ik_client.call_async(request)
         future.add_done_callback(
-            lambda result: self._on_goal_response(
+            lambda result: self._on_ik_result(
                 result,
                 source=source,
                 candidates=candidates,
@@ -334,6 +331,47 @@ class PlanToTag(Node):
                 target=target,
                 step=step,
             )
+        )
+
+    def _on_ik_result(
+        self,
+        future,
+        source: str = "",
+        candidates=None,
+        index: int = 0,
+        camera_target: Pose = None,
+        target: Pose = None,
+        step: float = 0.0,
+    ) -> None:
+        try:
+            result = future.result()
+        except Exception as exc:
+            self.get_logger().error(f"MoveIt IK request failed: {exc}")
+            return
+
+        code = result.error_code.val
+        if code != MoveItErrorCodes.SUCCESS:
+            self.get_logger().warn(
+                f"MoveIt IK failed candidate step={step:.3f}m: error_code={code}; "
+                "trying next candidate"
+            )
+            self._try_rviz_goal_candidates(candidates, source, index + 1)
+            return
+
+        result.solution.is_diff = False
+        self.rviz_start_pub.publish(Empty())
+        self.rviz_goal_pub.publish(result.solution)
+        self.rviz_plan_pub.publish(Empty())
+
+        if camera_target is not None and target is not None:
+            self.captured_camera_target_pose = camera_target
+            self.captured_target_pose = target
+            self.captured_plan_step = step
+            self._publish_goal_marker(camera_target)
+
+        self.get_logger().info(
+            f"Published RViz MotionPlanning goal state at step={step:.3f}m; "
+            "RViz should show the goal robot preview and run its normal Plan action"
         )
 
     def _plan_candidates(self):
@@ -417,46 +455,6 @@ class PlanToTag(Node):
             )
             return None
 
-    def _base_motion_plan_request(self) -> MotionPlanRequest:
-        request = MotionPlanRequest()
-        request.group_name = self.group_name
-        request.num_planning_attempts = 5
-        request.allowed_planning_time = self.allowed_planning_time
-        request.max_velocity_scaling_factor = self.velocity_scale
-        request.max_acceleration_scaling_factor = self.acceleration_scale
-        request.workspace_parameters.header.frame_id = self.fixed_frame
-        request.workspace_parameters.min_corner.x = -self.workspace_radius
-        request.workspace_parameters.min_corner.y = -self.workspace_radius
-        request.workspace_parameters.min_corner.z = -self.workspace_radius
-        request.workspace_parameters.max_corner.x = self.workspace_radius
-        request.workspace_parameters.max_corner.y = self.workspace_radius
-        request.workspace_parameters.max_corner.z = self.workspace_radius
-        if self.latest_joint_state is not None:
-            request.start_state.joint_state = self.latest_joint_state
-            request.start_state.is_diff = True
-        return request
-
-    def _motion_plan_request(self, target: Pose) -> MotionPlanRequest:
-        request = self._base_motion_plan_request()
-
-        sphere = SolidPrimitive()
-        sphere.type = SolidPrimitive.SPHERE
-        sphere.dimensions = [self.goal_tolerance]
-
-        position = PositionConstraint()
-        position.header.frame_id = self.fixed_frame
-        position.link_name = self.target_link
-        position.target_point_offset = self._target_point_offset()
-        position.constraint_region.primitives.append(sphere)
-        position.constraint_region.primitive_poses.append(target)
-        position.weight = 1.0
-
-        constraints = Constraints()
-        constraints.name = f"{self.tag_frame}_approach"
-        constraints.position_constraints.append(position)
-        request.goal_constraints.append(constraints)
-        return request
-
     def _rotate_vector(self, quaternion, vector):
         qx = quaternion.x
         qy = quaternion.y
@@ -479,31 +477,12 @@ class PlanToTag(Node):
             vz + 2.0 * (qw * uvz + uuvz),
         )
 
-    def _target_point_offset(self):
-        offset = PositionConstraint().target_point_offset
-        if self.target_link == self.camera_frame:
-            return offset
-
-        transform = self._lookup(self.target_link, self.camera_frame)
-        if transform is None:
-            self.get_logger().warn(
-                f"Could not resolve {self.target_link} -> {self.camera_frame}; "
-                "planning with zero target_point_offset"
-            )
-            return offset
-
-        offset.x = transform.transform.translation.x
-        offset.y = transform.transform.translation.y
-        offset.z = transform.transform.translation.z
-        return offset
-
-    def _planning_options(self) -> PlanningOptions:
-        options = PlanningOptions()
-        options.plan_only = not self.execute
-        options.look_around = False
-        options.replan = False
-        options.planning_scene_diff.is_diff = True
-        return options
+    def _duration_msg(self, seconds: float) -> DurationMsg:
+        whole = int(seconds)
+        msg = DurationMsg()
+        msg.sec = whole
+        msg.nanosec = int((seconds - whole) * 1_000_000_000)
+        return msg
 
     def _publish_goal_marker(self, target: Pose) -> None:
         marker = Marker()
@@ -552,86 +531,6 @@ class PlanToTag(Node):
         marker.color.b = 0.05
         marker.color.a = 0.75
         self.captured_marker_pub.publish(marker)
-
-    def _on_goal_response(
-        self,
-        future,
-        source: str = "",
-        candidates=None,
-        index: int = 0,
-        camera_target: Pose = None,
-        target: Pose = None,
-        step: float = 0.0,
-    ) -> None:
-        goal_handle = future.result()
-        if not goal_handle.accepted:
-            if candidates is not None:
-                self.get_logger().warn(
-                    f"MoveGroup rejected candidate step={step:.3f}m; trying next candidate"
-                )
-                self._try_moveit_candidates(candidates, source, index + 1)
-            else:
-                self.get_logger().error("MoveGroup rejected the plan-to-tag request")
-            return
-
-        self.get_logger().info("MoveGroup accepted the plan-to-tag request")
-        result_future = goal_handle.get_result_async()
-        result_future.add_done_callback(
-            lambda result: self._on_result(
-                result,
-                source=source,
-                candidates=candidates,
-                index=index,
-                camera_target=camera_target,
-                target=target,
-                step=step,
-            )
-        )
-
-    def _on_result(
-        self,
-        future,
-        source: str = "",
-        candidates=None,
-        index: int = 0,
-        camera_target: Pose = None,
-        target: Pose = None,
-        step: float = 0.0,
-    ) -> None:
-        result = future.result().result
-        code = result.error_code.val
-        if code != MoveItErrorCodes.SUCCESS:
-            if candidates is not None:
-                self.get_logger().warn(
-                    f"MoveGroup failed candidate step={step:.3f}m: error_code={code}; "
-                    "trying next candidate"
-                )
-                self._try_moveit_candidates(candidates, source, index + 1)
-            else:
-                self.get_logger().error(
-                    f"MoveGroup failed plan-to-tag request: error_code={code}"
-                )
-            return
-
-        if camera_target is not None and target is not None:
-            self.captured_camera_target_pose = camera_target
-            self.captured_target_pose = target
-            self.captured_plan_step = step
-            self._publish_goal_marker(camera_target)
-            self.get_logger().info(
-                f"MoveIt selected closest plannable target at step={step:.3f}m "
-                f"after {index + 1} candidate attempt(s)"
-            )
-
-        display = DisplayTrajectory()
-        display.model_id = "simple_assembly_tracking"
-        display.trajectory_start = result.trajectory_start
-        display.trajectory.append(result.planned_trajectory)
-        self.display_pub.publish(display)
-        action = "executed" if self.execute else "planned"
-        self.get_logger().info(
-            f"MoveGroup {action} path in {result.planning_time:.2f}s; published /display_planned_path"
-        )
 
 
 def main(args=None) -> None:
