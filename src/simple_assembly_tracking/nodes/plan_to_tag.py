@@ -7,8 +7,10 @@ from builtin_interfaces.msg import Duration as DurationMsg
 from geometry_msgs.msg import PointStamped, Pose
 from interactive_markers import InteractiveMarkerServer
 import rclpy
-from moveit_msgs.msg import MoveItErrorCodes, RobotState
+from moveit_msgs.action import MoveGroup
+from moveit_msgs.msg import Constraints, JointConstraint, MoveItErrorCodes, PlanningOptions, RobotState
 from moveit_msgs.srv import GetPositionIK
+from rclpy.action import ActionClient
 from rclpy.duration import Duration
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
@@ -32,6 +34,9 @@ class PlanToTag(Node):
         self.group_name = str(self.declare_parameter("group_name", "arm").value)
         self.ik_service = str(
             self.declare_parameter("ik_service", "/compute_ik").value
+        )
+        self.move_action = str(
+            self.declare_parameter("move_action", "/move_action").value
         )
         self.execute = bool(self.declare_parameter("execute", False).value)
         self.approach_distance = float(
@@ -58,14 +63,15 @@ class PlanToTag(Node):
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
         self.ik_client = self.create_client(GetPositionIK, self.ik_service)
+        self.move_group_client = ActionClient(self, MoveGroup, self.move_action)
         self.button_server = InteractiveMarkerServer(self, "plan_to_tag_button")
 
+        # RViz remote-control topics — used for preview when not auto-executing
         self.rviz_start_pub = self.create_publisher(Empty, "/rviz/moveit/update_start_state", 10)
         self.rviz_goal_pub = self.create_publisher(
             RobotState, "/rviz/moveit/update_custom_goal_state", 10
         )
-        plan_topic = "/rviz/moveit/plan_and_execute" if self.execute else "/rviz/moveit/plan"
-        self.rviz_plan_pub = self.create_publisher(Empty, plan_topic, 10)
+        self.rviz_plan_pub = self.create_publisher(Empty, "/rviz/moveit/plan", 10)
         self.captured_marker_pub = self.create_publisher(
             Marker, "/apriltag/captured_tag_marker", 10
         )
@@ -94,7 +100,7 @@ class PlanToTag(Node):
         self.create_subscription(JointState, "/joint_states", self.on_joint_state, 10)
         self._make_buttons()
 
-        mode = "rviz-managed"
+        mode = "execute" if self.execute else "plan-preview"
         self.get_logger().info(
             "PlanToTag ready "
             f"mode={mode} group={self.group_name} target_link={self.target_link} "
@@ -355,19 +361,90 @@ class PlanToTag(Node):
             return
 
         result.solution.is_diff = False
-        self.rviz_start_pub.publish(Empty())
-        self.rviz_goal_pub.publish(result.solution)
-        self.rviz_plan_pub.publish(Empty())
 
         if camera_target is not None and target is not None:
             self.captured_camera_target_pose = camera_target
             self.captured_target_pose = target
             self.captured_plan_step = step
 
-        action = "plan_and_execute" if self.execute else "plan"
-        self.get_logger().info(
-            f"Sent IK goal state to RViz MotionPlanning (step={step:.3f}m, action={action})"
+        # Always push goal state to RViz so the ghost robot is visible
+        self.rviz_start_pub.publish(Empty())
+        self.rviz_goal_pub.publish(result.solution)
+
+        if self.execute:
+            # Send directly to MoveGroup — no RViz needed for execution
+            self._send_moveit_joint_goal(result.solution, source, step)
+        else:
+            # Plan-preview mode: trigger RViz to plan so user can inspect before executing
+            self.rviz_plan_pub.publish(Empty())
+            self.get_logger().info(
+                f"IK goal set in RViz (step={step:.3f}m); click Execute in MotionPlanning panel"
+            )
+
+    def _send_moveit_joint_goal(self, solution: RobotState, source: str, step: float) -> None:
+        js = solution.joint_state
+        constraints = Constraints()
+        constraints.name = "ik_goal"
+        for name, pos in zip(js.name, js.position):
+            jc = JointConstraint()
+            jc.joint_name = name
+            jc.position = pos
+            jc.tolerance_above = self.goal_tolerance
+            jc.tolerance_below = self.goal_tolerance
+            jc.weight = 1.0
+            constraints.joint_constraints.append(jc)
+
+        from moveit_msgs.msg import MotionPlanRequest, WorkspaceParameters
+        req = MotionPlanRequest()
+        req.group_name = self.group_name
+        req.num_planning_attempts = 5
+        req.allowed_planning_time = 5.0
+        req.max_velocity_scaling_factor = 0.3
+        req.max_acceleration_scaling_factor = 0.3
+        req.goal_constraints.append(constraints)
+        if self.latest_joint_state is not None:
+            req.start_state.joint_state = self.latest_joint_state
+            req.start_state.is_diff = True
+
+        options = PlanningOptions()
+        options.plan_only = False
+        options.planning_scene_diff.is_diff = True
+
+        goal = MoveGroup.Goal()
+        goal.request = req
+        goal.planning_options = options
+
+        if not self.move_group_client.wait_for_server(timeout_sec=2.0):
+            self.get_logger().error(f"MoveGroup action server not available: {self.move_action}")
+            return
+
+        self.get_logger().info(f"Sending MoveGroup goal (step={step:.3f}m, source={source})")
+        future = self.move_group_client.send_goal_async(goal)
+        future.add_done_callback(
+            lambda f: self._on_moveit_goal_response(f, step=step)
         )
+
+    def _on_moveit_goal_response(self, future, step: float = 0.0) -> None:
+        goal_handle = future.result()
+        if not goal_handle.accepted:
+            self.get_logger().error(f"MoveGroup rejected goal at step={step:.3f}m")
+            return
+        self.get_logger().info("MoveGroup accepted; executing…")
+        goal_handle.get_result_async().add_done_callback(
+            lambda f: self._on_moveit_result(f, step=step)
+        )
+
+    def _on_moveit_result(self, future, step: float = 0.0) -> None:
+        result = future.result().result
+        code = result.error_code.val
+        if code != MoveItErrorCodes.SUCCESS:
+            self.get_logger().error(
+                f"MoveGroup execution failed at step={step:.3f}m: error_code={code}"
+            )
+        else:
+            self.get_logger().info(
+                f"MoveGroup executed in {result.planning_time:.2f}s (step={step:.3f}m)"
+            )
 
     def _plan_candidates(self):
         full_step = self._pose_distance(
