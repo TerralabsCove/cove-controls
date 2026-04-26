@@ -221,6 +221,141 @@ export PI_IP=<pi-tailscale-ip>
 ./scripts/pi/dual_launch.sh
 ```
 
+---
+
+## AprilTag Plan-to-Tag
+
+Moves the arm's camera to a detected AprilTag using MoveIt.
+
+### Architecture
+
+- The Pi runs the full robot stack (MoveIt `move_group`, ros2_control, camera, AprilTag detector) plus the `plan_to_tag` node.
+- Ubuntu runs RViz for visualisation and the MotionPlanning panel.
+- The `plan_to_tag` node solves goals using a MoveIt `PositionConstraint` on `camera_optical_frame` — no IK pre-solve, no orientation fallback. The MoveIt planner picks any valid joint configuration that places the camera at the target XYZ.
+- When `orient_to_tag:=true` (default), an `OrientationConstraint` is added that aligns the camera Z-axis anti-parallel to the tag Z-axis (arm approaches perpendicular to the tag plane). Roll around the approach axis is free.
+
+### Workflow
+
+1. **Capture** — freezes the current tag TF position.
+2. **Plan Captured** — sends a MoveGroup goal. In execute mode the arm moves; in preview mode RViz shows the ghost robot.
+
+Capture and Plan buttons appear as interactive markers in RViz. Alternatively publish to the topics directly:
+
+```bash
+ros2 topic pub --once /apriltag/capture_tag std_msgs/msg/Empty '{}'
+ros2 topic pub --once /apriltag/plan_captured_tag std_msgs/msg/Empty '{}'
+```
+
+### Scripts
+
+| Script | Mode | Orientation |
+|---|---|---|
+| `scripts/pi/plan_to_tag_pi.sh` | preview (no execute) | normal to tag |
+| `scripts/pi/plan_to_tag_pi_execute.sh` | execute | normal to tag |
+| `scripts/pi/plan_to_tag_pi_position_only.sh` | preview | position only |
+| `scripts/pi/plan_to_tag_pi_execute_position_only.sh` | execute | position only |
+
+Ubuntu (RViz):
+
+```bash
+./scripts/ubuntu/plan_to_tag_rviz.sh
+```
+
+### Key Parameters
+
+| Parameter | Default | Description |
+|---|---|---|
+| `execute` | `false` | If true, arm moves; if false, plan preview only |
+| `approach_distance` | `0.0` | Standoff from tag face in metres (0 = go to tag) |
+| `orient_to_tag` | `true` | Constrain camera to face the tag perpendicularly |
+| `orientation_tolerance` | `0.2` | Approach axis tolerance in radians (~11°) |
+| `goal_tolerance` | `0.04` | Position goal sphere radius in metres |
+| `velocity_scale` | `0.3` | MoveIt velocity scaling (0–1) |
+
+### RViz Setup
+
+The MotionPlanning panel must have **External Comm.** enabled (already set in `plan_to_tag.rviz`). The node pushes the planned goal state to RViz after each successful plan so the ghost robot preview is always visible.
+
+---
+
+## Waypoint Runner
+
+Steps the arm through a predefined list of Cartesian positions, one at a time, requiring manual approval for each motion.
+
+### Defining Waypoints
+
+Edit the `WAYPOINTS` list near the top of `src/simple_assembly_tracking/nodes/waypoint_runner.py`:
+
+```python
+WAYPOINTS = [
+    ("home",    0.30,  0.00, 0.45),   # (name, x, y, z) in metres, root frame
+    ("point_a", 0.35,  0.10, 0.35),
+]
+```
+
+Waypoints are also stored in `locations.txt` at the repo root (one per line, `tf2_echo` Translation format). When you record new positions with `show_eef_pose.sh`, copy the lines into `locations.txt` then update `WAYPOINTS` in the node.
+
+### Z Limit
+
+The node refuses to execute any waypoint whose Z is below `min_z` (default `0.0565 m` — the height of `revolute_1_0`, the first base joint, in the root frame). Override at launch:
+
+```bash
+./scripts/pi/waypoint_runner_pi.sh min_z:=0.10
+```
+
+### Scripts
+
+Pi (robot + waypoint node):
+
+```bash
+./scripts/pi/waypoint_runner_pi.sh
+```
+
+Ubuntu (RViz):
+
+```bash
+./scripts/ubuntu/plan_to_tag_rviz.sh
+```
+
+### Approving Each Motion
+
+**Option A — RViz button:** click the green **EXECUTE** button in the 3D view. The button label shows the next waypoint name and index.
+
+**Option B — Terminal on the Pi:** run this in a second terminal alongside `waypoint_runner_pi.sh`:
+
+```bash
+./scripts/pi/waypoint_approve.sh
+```
+
+Press **Enter** to execute each waypoint.
+
+**Option C — Topic:**
+
+```bash
+ros2 topic pub --once /waypoints/execute std_msgs/msg/Empty '{}'
+```
+
+### RViz Visualisation
+
+All waypoints appear as labelled spheres. The current target is bright green; completed/future waypoints are grey. After each successful motion the index advances automatically and loops back to the start.
+
+---
+
+## Utilities
+
+### Live End-Effector Position
+
+Stream the Cartesian position of the camera frame in the terminal (with correct DDS environment):
+
+```bash
+./scripts/ubuntu/show_eef_pose.sh                        # root → camera_optical_frame
+./scripts/ubuntu/show_eef_pose.sh root wrist_link        # root → wrist_link
+```
+
+Output is the `Translation: [x, y, z]` line from `tf2_echo`, filtered for readability.
+
+---
+
 ## Notes
 
 - The repo is meant to be built directly as the workspace root.
