@@ -1,9 +1,6 @@
 #include "damiao_driver/damiao_hardware_interface.hpp"
 
 #include <cstring>
-#include <filesystem>
-#include <fstream>
-#include <sstream>
 #include <stdexcept>
 
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
@@ -45,8 +42,6 @@ hardware_interface::CallbackReturn DamiaoHardwareInterface::on_init(
   std::string serial_port = "/dev/ttyACM0";
   int baud_rate = 921600;
   control_mode_ = "pos_vel";
-  zero_offsets_file_ = "/home/terralabscove/.ros/damiao_zero_offsets.yaml";
-  calibrate_on_start_ = false;
 
   if (info_.hardware_parameters.count("serial_port"))
     serial_port = info_.hardware_parameters.at("serial_port");
@@ -54,12 +49,6 @@ hardware_interface::CallbackReturn DamiaoHardwareInterface::on_init(
     baud_rate = std::stoi(info_.hardware_parameters.at("baud_rate"));
   if (info_.hardware_parameters.count("control_mode"))
     control_mode_ = info_.hardware_parameters.at("control_mode");
-  if (info_.hardware_parameters.count("zero_offsets_file"))
-    zero_offsets_file_ = info_.hardware_parameters.at("zero_offsets_file");
-  if (info_.hardware_parameters.count("calibrate_on_start")) {
-    const auto value = info_.hardware_parameters.at("calibrate_on_start");
-    calibrate_on_start_ = value == "true" || value == "True" || value == "1";
-  }
 
   // Open serial port
   speed_t baud_code = B921600;
@@ -181,34 +170,25 @@ hardware_interface::CallbackReturn DamiaoHardwareInterface::on_activate(
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
-    if (calibrate_on_start_) {
-      if (!capture_zero_offsets() || !save_zero_offsets()) {
-        RCLCPP_ERROR(
-          rclcpp::get_logger("DamiaoHardwareInterface"),
-          "Failed to calibrate and save zero offsets. Motors will not be marked ready.");
-        for (auto & motor : motors_) {
-          try { mc_->disable(motor); } catch (...) {}
-        }
-        return;
+    // Capture the motor's current encoder reading as the zero offset.
+    // The arm must be physically at the vertical (zero) position before starting.
+    // After this, read() reports (motor_pos - offset) → 0.0 at startup,
+    // and write() sends (logical_cmd + offset) → holds current physical position.
+    // hw_positions_ and hw_cmd_positions_ stay 0.0 so the JTC initializes its
+    // setpoint to zero and the first write() keeps the motor exactly where it is.
+    for (int attempt = 0; attempt < 5; attempt++) {
+      for (size_t i = 0; i < motors_.size(); i++) {
+        mc_->refresh_motor_status(motors_[i]);
+        zero_offsets_[i] = static_cast<double>(motors_[i].Get_Position());
       }
-      RCLCPP_WARN(
-        rclcpp::get_logger("DamiaoHardwareInterface"),
-        "Calibration mode captured new zero offsets: %s",
-        zero_offsets_string().c_str());
-    } else if (!load_zero_offsets()) {
-      RCLCPP_ERROR(
-        rclcpp::get_logger("DamiaoHardwareInterface"),
-        "No saved zero offsets loaded from '%s'. Start once with calibrate_on_start=true "
-        "while the arm is physically at zero, then restart with calibrate_on_start=false.",
-        zero_offsets_file_.c_str());
-      for (auto & motor : motors_) {
-        try { mc_->disable(motor); } catch (...) {}
-      }
-      return;
+      std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
-
+    std::string offset_str;
+    for (size_t i = 0; i < zero_offsets_.size(); i++) {
+      offset_str += info_.joints[i].name + "=" + std::to_string(zero_offsets_[i]) + " ";
+    }
     RCLCPP_INFO(rclcpp::get_logger("DamiaoHardwareInterface"),
-      "Zero offsets active: %s", zero_offsets_string().c_str());
+      "Zero offsets captured: %s", offset_str.c_str());
 
     motors_ready_ = true;
     RCLCPP_INFO(rclcpp::get_logger("DamiaoHardwareInterface"), "Motors ready.");
@@ -240,7 +220,6 @@ hardware_interface::return_type DamiaoHardwareInterface::read(
   const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
 {
   if (!motors_ready_) return hardware_interface::return_type::OK;
-  std::lock_guard<std::mutex> lock(motor_mutex_);
   for (size_t i = 0; i < motors_.size(); i++) {
     mc_->refresh_motor_status(motors_[i]);
     hw_positions_[i]  = static_cast<double>(motors_[i].Get_Position()) - zero_offsets_[i];
@@ -257,7 +236,6 @@ hardware_interface::return_type DamiaoHardwareInterface::write(
   const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
 {
   if (!motors_ready_) return hardware_interface::return_type::OK;
-  std::lock_guard<std::mutex> lock(motor_mutex_);
   for (size_t i = 0; i < motors_.size(); i++) {
     if (control_mode_ == "velocity") {
       mc_->control_vel(motors_[i], static_cast<float>(hw_cmd_velocities_[i]));
@@ -272,107 +250,6 @@ hardware_interface::return_type DamiaoHardwareInterface::write(
     }
   }
   return hardware_interface::return_type::OK;
-}
-
-bool DamiaoHardwareInterface::capture_zero_offsets()
-{
-  std::lock_guard<std::mutex> lock(motor_mutex_);
-  for (int attempt = 0; attempt < 5; attempt++) {
-    for (size_t i = 0; i < motors_.size(); i++) {
-      mc_->refresh_motor_status(motors_[i]);
-      zero_offsets_[i] = static_cast<double>(motors_[i].Get_Position());
-    }
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-  }
-  return true;
-}
-
-bool DamiaoHardwareInterface::load_zero_offsets()
-{
-  std::ifstream input(zero_offsets_file_);
-  if (!input.is_open()) {
-    return false;
-  }
-
-  std::vector<double> loaded(info_.joints.size(), 0.0);
-  std::vector<bool> seen(info_.joints.size(), false);
-  std::string line;
-  while (std::getline(input, line)) {
-    const auto comment = line.find('#');
-    if (comment != std::string::npos) {
-      line = line.substr(0, comment);
-    }
-
-    const auto colon = line.find(':');
-    if (colon == std::string::npos) {
-      continue;
-    }
-
-    const auto name = line.substr(0, colon);
-    std::string value = line.substr(colon + 1);
-    std::stringstream value_stream(value);
-    double offset = 0.0;
-    if (!(value_stream >> offset)) {
-      continue;
-    }
-
-    for (size_t i = 0; i < info_.joints.size(); i++) {
-      if (name == info_.joints[i].name) {
-        loaded[i] = offset;
-        seen[i] = true;
-        break;
-      }
-    }
-  }
-
-  for (size_t i = 0; i < seen.size(); i++) {
-    if (!seen[i]) {
-      RCLCPP_ERROR(
-        rclcpp::get_logger("DamiaoHardwareInterface"),
-        "Zero offset file '%s' is missing joint '%s'",
-        zero_offsets_file_.c_str(), info_.joints[i].name.c_str());
-      return false;
-    }
-  }
-
-  zero_offsets_ = loaded;
-  return true;
-}
-
-bool DamiaoHardwareInterface::save_zero_offsets()
-{
-  try {
-    const auto path = std::filesystem::path(zero_offsets_file_);
-    if (path.has_parent_path()) {
-      std::filesystem::create_directories(path.parent_path());
-    }
-
-    std::ofstream output(zero_offsets_file_, std::ios::trunc);
-    if (!output.is_open()) {
-      return false;
-    }
-
-    output << "# Damiao motor encoder offsets. Do not edit while the robot is running.\n";
-    for (size_t i = 0; i < zero_offsets_.size(); i++) {
-      output << info_.joints[i].name << ": " << zero_offsets_[i] << "\n";
-    }
-    return true;
-  } catch (const std::exception & exc) {
-    RCLCPP_ERROR(
-      rclcpp::get_logger("DamiaoHardwareInterface"),
-      "Failed to save zero offsets to '%s': %s",
-      zero_offsets_file_.c_str(), exc.what());
-    return false;
-  }
-}
-
-std::string DamiaoHardwareInterface::zero_offsets_string() const
-{
-  std::string offset_str;
-  for (size_t i = 0; i < zero_offsets_.size(); i++) {
-    offset_str += info_.joints[i].name + "=" + std::to_string(zero_offsets_[i]) + " ";
-  }
-  return offset_str;
 }
 
 }  // namespace damiao_driver

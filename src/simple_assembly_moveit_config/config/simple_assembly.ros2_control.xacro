@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
-    <xacro:macro name="simple_assembly_ros2_control" params="name calibrate_on_start:=false zero_offsets_file:=/home/terralabscove/.ros/damiao_zero_offsets.yaml">
+    <xacro:macro name="simple_assembly_ros2_control" params="name">
 
         <ros2_control name="${name}" type="system">
             <hardware>
@@ -8,8 +8,6 @@
                 <param name="serial_port">/dev/ttyACM0</param>
                 <param name="baud_rate">921600</param>
                 <param name="control_mode">position</param>
-                <param name="zero_offsets_file">${zero_offsets_file}</param>
-                <param name="calibrate_on_start">${calibrate_on_start}</param>
             </hardware>
 
             <!-- Joint 1 (base): Z-type DM10010, physical top-to-bottom index 7 -->

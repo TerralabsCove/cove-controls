@@ -3,13 +3,7 @@
 
     <xacro:include filename="$(find simple_assembly_tracking)/urdf/simple_assembly_tracking.urdf.xacro" />
 
-    <xacro:arg name="calibrate_on_start" default="false"/>
-    <xacro:arg name="zero_offsets_file" default="/home/terralabscove/.ros/damiao_zero_offsets.yaml"/>
-
     <xacro:include filename="simple_assembly_tracking.ros2_control.xacro" />
-    <xacro:simple_assembly_tracking_ros2_control
-        name="DamiaoArm"
-        calibrate_on_start="$(arg calibrate_on_start)"
-        zero_offsets_file="$(arg zero_offsets_file)"/>
+    <xacro:simple_assembly_tracking_ros2_control name="DamiaoArm"/>
 
 </robot>
