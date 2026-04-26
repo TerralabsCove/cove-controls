@@ -27,6 +27,8 @@ def generate_launch_description():
             DeclareLaunchArgument("max_plan_step", default_value="0.0"),
             DeclareLaunchArgument("ik_search_samples", default_value="10"),
             DeclareLaunchArgument("goal_tolerance", default_value="0.04"),
+            DeclareLaunchArgument("orient_to_tag", default_value="true"),
+            DeclareLaunchArgument("orientation_tolerance", default_value="0.2"),
             DeclareLaunchArgument("target_link", default_value="wrist_link"),
             DeclareLaunchArgument("execute", default_value="false"),
             IncludeLaunchDescription(
@@ -78,6 +80,12 @@ def generate_launch_description():
                         ),
                         "goal_tolerance": ParameterValue(
                             LaunchConfiguration("goal_tolerance"), value_type=float
+                        ),
+                        "orient_to_tag": ParameterValue(
+                            LaunchConfiguration("orient_to_tag"), value_type=bool
+                        ),
+                        "orientation_tolerance": ParameterValue(
+                            LaunchConfiguration("orientation_tolerance"), value_type=float
                         ),
                         "target_link": LaunchConfiguration("target_link"),
                         "execute": ParameterValue(

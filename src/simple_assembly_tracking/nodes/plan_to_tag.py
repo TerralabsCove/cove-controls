@@ -7,9 +7,11 @@ from geometry_msgs.msg import PointStamped, Pose
 from interactive_markers import InteractiveMarkerServer
 import rclpy
 from moveit_msgs.action import MoveGroup
+from geometry_msgs.msg import Quaternion
 from moveit_msgs.msg import (
     BoundingVolume, Constraints, MoveItErrorCodes,
-    MotionPlanRequest, PlanningOptions, PositionConstraint, RobotState,
+    MotionPlanRequest, OrientationConstraint, PlanningOptions,
+    PositionConstraint, RobotState,
 )
 from rclpy.action import ActionClient
 from rclpy.duration import Duration
@@ -41,6 +43,10 @@ class PlanToTag(Node):
         self.tag_size = float(self.declare_parameter("tag_size", 0.162).value)
         self.goal_tolerance = float(
             self.declare_parameter("goal_tolerance", 0.04).value
+        )
+        self.orient_to_tag = bool(self.declare_parameter("orient_to_tag", True).value)
+        self.orientation_tolerance = float(
+            self.declare_parameter("orientation_tolerance", 0.2).value
         )
         self.velocity_scale = float(
             self.declare_parameter("velocity_scale", 0.3).value
@@ -84,8 +90,9 @@ class PlanToTag(Node):
         self._make_buttons()
 
         mode = "execute" if self.execute else "plan-preview"
+        orient = f"normal(tol={self.orientation_tolerance:.2f}rad)" if self.orient_to_tag else "position-only"
         self.get_logger().info(
-            f"PlanToTag ready mode={mode} group={self.group_name} "
+            f"PlanToTag ready mode={mode} orient={orient} group={self.group_name} "
             f"camera={self.camera_frame} approach_distance={self.approach_distance:.3f}m "
             f"tag={self.tag_frame} capture=/apriltag/capture_tag "
             "plan=/apriltag/plan_captured_tag rviz_buttons=/plan_to_tag_button"
@@ -260,6 +267,12 @@ class PlanToTag(Node):
         goal_constraints = Constraints()
         goal_constraints.name = "tag_position"
         goal_constraints.position_constraints.append(pc)
+
+        if self.orient_to_tag and self.captured_tag_pose is not None:
+            goal_constraints.orientation_constraints.append(
+                self._tag_normal_constraint()
+            )
+
         req.goal_constraints.append(goal_constraints)
         if self.latest_joint_state is not None:
             req.start_state.joint_state = self.latest_joint_state
@@ -274,14 +287,40 @@ class PlanToTag(Node):
         goal.planning_options = options
 
         action = "plan" if plan_only else "execute"
+        orient_note = f" + normal to tag (tol={self.orientation_tolerance:.2f}rad)" if self.orient_to_tag else ""
         self.get_logger().info(
             f"{source} {action}: moving {self.camera_frame} to "
             f"({target.position.x:.3f}, {target.position.y:.3f}, {target.position.z:.3f})"
+            f"{orient_note}"
         )
         future = self.move_group_client.send_goal_async(goal)
         future.add_done_callback(
             lambda f: self._on_goal_response(f, plan_only=plan_only)
         )
+
+    def _tag_normal_constraint(self) -> OrientationConstraint:
+        # Tag Z-axis (apriltag_ros) points out of the tag face toward the camera.
+        # For the camera to face the tag straight-on, camera Z must be anti-parallel
+        # to tag Z, achieved by rotating the tag quaternion 180° around X.
+        tq = self.captured_tag_pose.orientation
+        # Hamilton product: tq * (1, 0, 0, 0)  [180° around X in (x,y,z,w)]
+        desired = Quaternion()
+        desired.x =  tq.w
+        desired.y =  tq.z
+        desired.z = -tq.y
+        desired.w = -tq.x
+
+        oc = OrientationConstraint()
+        oc.header.frame_id = self.fixed_frame
+        oc.header.stamp = self.get_clock().now().to_msg()
+        oc.link_name = self.camera_frame
+        oc.orientation = desired
+        # Tight X/Y constrain the approach axis; free Z allows rolling around it
+        oc.absolute_x_axis_tolerance = self.orientation_tolerance
+        oc.absolute_y_axis_tolerance = self.orientation_tolerance
+        oc.absolute_z_axis_tolerance = math.pi
+        oc.weight = 1.0
+        return oc
 
     def _on_goal_response(self, future, plan_only: bool = False) -> None:
         goal_handle = future.result()
