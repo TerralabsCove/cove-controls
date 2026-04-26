@@ -56,7 +56,7 @@ class PlanToTag(Node):
             self.declare_parameter("arm_joint_names", ARM_JOINTS).value
         )
         self.approach_distance = float(
-            self.declare_parameter("approach_distance", 0.05).value
+            self.declare_parameter("approach_distance", 0.0).value
         )
         self.proxy_plan_step = float(
             self.declare_parameter("proxy_plan_step", 0.0).value
