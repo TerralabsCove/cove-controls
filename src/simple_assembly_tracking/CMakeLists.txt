@@ -9,6 +9,7 @@ install(
     nodes/tag_tracker.py
     nodes/autotune_sweep.py
     nodes/plan_to_tag.py
+    nodes/waypoint_runner.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
