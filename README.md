@@ -110,6 +110,14 @@ ip -brief addr show tailscale0
 ip route get 100.88.175.52
 ```
 
+Or run the automated helper from the Ubuntu VM:
+
+```bash
+./scripts/ubuntu/util/fix_ssh.sh
+```
+
+The helper restarts local Tailscale, disables Tailscale SSH on the Pi through the LAN fallback, installs the NetworkManager dispatcher hook described below, and verifies SSH over the Pi Tailscale IP. Override defaults with `PI_USER`, `PI_PASS`, `PI_LAN_HOST`, `PI_TS_IP`, or `NM_IFACE` if the setup changes.
+
 The LAN path can be used while Tailscale routing is broken:
 
 ```bash
