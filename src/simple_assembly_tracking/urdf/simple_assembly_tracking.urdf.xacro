@@ -3,29 +3,24 @@
 
     <xacro:include filename="$(find full_assembly)/urdf/simple_assembly.urdf" />
 
-    <link name="camera_link">
-        <visual>
-            <geometry>
-                <box size="0.04 0.08 0.03"/>
-            </geometry>
-            <material name="camera_black">
-                <color rgba="0.1 0.1 0.1 1"/>
-            </material>
-        </visual>
-    </link>
+    <!-- Pure frame at the OnShape camera mount; mount mesh already shows the camera body. -->
+    <link name="camera_link"/>
 
     <joint name="camera_joint" type="fixed">
         <parent link="cam_mount_assy__1_"/>
         <child link="camera_link"/>
-        <origin xyz="0 0 0.0536" rpy="0 0 0"/>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
     </joint>
 
     <link name="camera_optical_frame"/>
 
+    <!-- ROS optical convention: X=right, Y=down, Z=forward (looking out the lens).
+         Offsets are the camera-perspective offset of the lens centre from the
+         camera_link/cam_mount frame: 17 mm right, 53.6 mm up. -->
     <joint name="camera_optical_joint" type="fixed">
         <parent link="camera_link"/>
         <child link="camera_optical_frame"/>
-        <origin xyz="0.017 0 0" rpy="0 0 1.5708"/>
+        <origin xyz="0.017 -0.0536 0" rpy="0 0 1.5708"/>
     </joint>
 
 </robot>
