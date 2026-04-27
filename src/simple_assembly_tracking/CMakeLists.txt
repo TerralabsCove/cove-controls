@@ -11,6 +11,7 @@ install(
     nodes/plan_to_tag.py
     nodes/waypoint_runner.py
     nodes/continuous_path.py
+    nodes/pickup_sequence.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
