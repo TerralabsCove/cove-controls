@@ -409,7 +409,7 @@
         <axis xyz="0 0 -1" />
         <parent link="part_1_8" />
         <child link="part_1_16" />
-        <limit lower="-6.28318" upper="6.28318" effort="150.0" velocity="15.71" />
+        <limit lower="-3.14159" upper="3.14159" effort="150.0" velocity="15.71" />
     </joint>
 
     <link name="wrist_link" />
