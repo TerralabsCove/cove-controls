@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
 import time
 from dataclasses import dataclass, field
@@ -10,6 +11,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 import rclpy
 from ament_index_python.packages import get_package_share_directory
@@ -47,6 +50,8 @@ class CoveKioskBridge(Node):
         "moving": 7.0,
         "arrived": 30.0,
     }
+    DEFAULT_ELEVENLABS_MODEL = "eleven_multilingual_v2"
+    DEFAULT_ELEVENLABS_VOICE_ID = "JBFqnCBsd6RMkjVDRZzb"
 
     def __init__(self) -> None:
         super().__init__("cove_kiosk_bridge")
@@ -84,6 +89,15 @@ class CoveKioskBridge(Node):
         self._last_joint_state_wall = 0.0
         self._current_order_id: Optional[int] = None
         self._average_cycle_seconds = 43.0
+        self._elevenlabs_api_key = os.environ.get("ELEVENLABS_API_KEY", "").strip()
+        self._elevenlabs_voice_id = os.environ.get(
+            "ELEVENLABS_VOICE_ID",
+            self.DEFAULT_ELEVENLABS_VOICE_ID,
+        ).strip()
+        self._elevenlabs_model_id = os.environ.get(
+            "ELEVENLABS_MODEL_ID",
+            self.DEFAULT_ELEVENLABS_MODEL,
+        ).strip()
 
         simulate_only = bool(self.get_parameter("simulate_only").value)
         allow_fallback = bool(self.get_parameter("allow_simulation_fallback").value)
@@ -105,6 +119,12 @@ class CoveKioskBridge(Node):
         self.get_logger().info(
             f"COVE kiosk bridge serving {self._frontend_path} on http://{self._bind_host}:{self._bind_port}"
         )
+        if self._elevenlabs_api_key:
+            self.get_logger().info(
+                f"ElevenLabs TTS enabled with voice '{self._elevenlabs_voice_id}' and model '{self._elevenlabs_model_id}'."
+            )
+        else:
+            self.get_logger().warning("ElevenLabs TTS disabled: ELEVENLABS_API_KEY is not set.")
 
     def destroy_node(self) -> bool:
         self._shutdown_event.set()
@@ -187,6 +207,40 @@ class CoveKioskBridge(Node):
 
     def serve_frontend(self) -> bytes:
         return self._frontend_path.read_bytes()
+
+    def synthesize_speech(self, text: str) -> tuple[bytes, str]:
+        cleaned = " ".join(text.split()).strip()
+        if not cleaned:
+            raise ValueError("TTS text is required.")
+        if not self._elevenlabs_api_key:
+            raise ValueError("ElevenLabs TTS is not configured.")
+
+        payload = json.dumps(
+            {
+                "text": cleaned,
+                "model_id": self._elevenlabs_model_id or self.DEFAULT_ELEVENLABS_MODEL,
+            }
+        ).encode("utf-8")
+        voice_id = self._elevenlabs_voice_id or self.DEFAULT_ELEVENLABS_VOICE_ID
+        request = Request(
+            f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}?output_format=mp3_44100_128",
+            data=payload,
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "audio/mpeg",
+                "xi-api-key": self._elevenlabs_api_key,
+            },
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=20.0) as response:
+                content_type = response.headers.get("Content-Type", "audio/mpeg")
+                return response.read(), content_type
+        except HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            raise ValueError(f"ElevenLabs TTS request failed ({exc.code}): {detail}") from exc
+        except URLError as exc:
+            raise ValueError(f"ElevenLabs TTS request failed: {exc.reason}") from exc
 
     def _queue_worker(self) -> None:
         while not self._shutdown_event.is_set():
@@ -330,6 +384,10 @@ class CoveKioskBridge(Node):
                     if parsed.path == "/api/orders":
                         order = node.enqueue_order(str(body.get("name", "")), bool(body.get("isMe", True)))
                         self._send_json({"ok": True, "order": order}, status=HTTPStatus.CREATED)
+                        return
+                    if parsed.path == "/api/tts":
+                        audio_bytes, content_type = node.synthesize_speech(str(body.get("text", "")))
+                        self._send_bytes(audio_bytes, content_type)
                         return
                     if parsed.path == "/api/operator/error":
                         self._send_json({"ok": True, "state": node.inject_fault()})

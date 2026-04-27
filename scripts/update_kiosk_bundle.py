@@ -18,19 +18,19 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "accentHue": 140,
   "speed": 3,
   "showDotmatrix": false,
-  "headline": "tap for <em>tea</em>."
+  "headline": "order <em>matcha</em>."
 }/*EDITMODE-END*/;
 
 const API_BASE = '';
 const TESTNAMES = ['A. Chen', 'M. Yong', 'J. Rodriguez', 'I. Chan', 'J. Cappo', 'K. Park', 'R. Tanaka', 'S. Bauer'];
 const STEPS = ['idle', 'received', 'pouring', 'moving', 'arrived'];
 const LABELS = {
-  idle: { headline: null, sub: null, tag: 'waiting for input', status: 'System - Nominal', dot: 'idle' },
-  received: { headline: 'order <em>received.</em>', sub: 'Cove reserved your slot and is rotating to the pour station.', tag: 'confirming', status: 'System - Order received', dot: 'idle' },
-  pouring: { headline: 'pouring <em>your matcha.</em>', sub: '240ml ceremonial-grade usucha into a compostable cup.', tag: 'in progress', status: 'System - Pouring', dot: 'idle' },
-  moving: { headline: 'on the <em>way</em>.', sub: 'Cove is navigating to your pickup slot.', tag: 'transit', status: 'System - In transit', dot: 'idle' },
-  arrived: { headline: 'arrived. <em>enjoy.</em>', sub: 'Your slot is open. Lift the door and take your matcha.', tag: 'complete', status: 'System - Delivered', dot: 'idle' },
-  error: { headline: 'we need a <em>minute</em>.', sub: 'A fault was detected and the operator panel is holding the queue.', tag: 'attention required', status: 'System - Fault', dot: 'err' },
+  idle: { headline: null, sub: null, activity: 'Ready for your order', tag: 'waiting for input', status: 'System - Nominal', dot: 'idle' },
+  received: { headline: 'order <em>received.</em>', sub: 'Cove is starting your order now.', activity: 'Starting your order', tag: 'confirming', status: 'System - Order received', dot: 'idle' },
+  pouring: { headline: 'pouring <em>your matcha.</em>', sub: 'Your drink is being prepared now.', activity: 'Pouring your drink', tag: 'in progress', status: 'System - Pouring', dot: 'idle' },
+  moving: { headline: 'on the <em>way</em>.', sub: 'Cove is moving your order to pickup.', activity: 'Moving your drink to pickup', tag: 'transit', status: 'System - In transit', dot: 'idle' },
+  arrived: { headline: 'arrived. <em>enjoy.</em>', sub: 'Your order is ready for pickup.', activity: 'Giving you your drink', tag: 'complete', status: 'System - Delivered', dot: 'idle' },
+  error: { headline: 'we need a <em>minute</em>.', sub: 'A fault was detected and the operator panel is holding the queue.', activity: 'System needs attention', tag: 'attention required', status: 'System - Fault', dot: 'err' },
 };
 
 let tw = { ...TWEAK_DEFAULTS };
@@ -44,6 +44,136 @@ let soundOn = true;
 let apiOnline = false;
 let submittingOrder = false;
 let lastSnapshot = null;
+let lastSpokenOrderId = null;
+let activeAnnouncementAudio = null;
+
+function simplifyChrome() {
+  const style = document.createElement('style');
+  style.textContent = `
+    .grid { grid-template-columns: 1fr !important; }
+    .hero {
+      border-right: none !important;
+      padding: 104px 72px 72px !important;
+      display: grid !important;
+      place-items: center !important;
+    }
+    .hero > div:first-child,
+    .order-meta,
+    .rail,
+    #oppanel,
+    #opBtn,
+    #soundBtn,
+    #tweaks,
+    .botbar,
+    .fill-indicator,
+    .topbar .meta,
+    .logo .divider,
+    .logo .robot {
+      display: none !important;
+    }
+    .topbar {
+      justify-content: flex-start !important;
+      padding: 0 36px !important;
+    }
+    .topbar .logo img {
+      height: 44px !important;
+    }
+    .order-block {
+      position: relative !important;
+      z-index: 4 !important;
+      display: grid !important;
+      grid-template-columns: 1fr 1fr !important;
+      align-items: center !important;
+      column-gap: 72px !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      margin: 0 !important;
+    }
+    .order-btn {
+      width: 580px !important;
+      height: 580px !important;
+      flex: 0 0 580px !important;
+      font-size: 88px !important;
+      gap: 16px !important;
+      justify-self: end !important;
+    }
+    .order-btn .tap {
+      margin-top: 12px !important;
+      font-size: 18px !important;
+    }
+    .hero-figure {
+      position: relative !important;
+      right: auto !important;
+      bottom: auto !important;
+      width: 700px !important;
+      height: 700px !important;
+      flex: 0 0 700px !important;
+      opacity: 1 !important;
+      order: 2 !important;
+      margin: 0 !important;
+      justify-self: start !important;
+    }
+    .activity-text {
+      position: absolute !important;
+      left: 50% !important;
+      bottom: 118px !important;
+      transform: translateX(-50%) !important;
+      z-index: 6 !important;
+      min-width: 420px !important;
+      padding: 14px 24px !important;
+      border: 1px solid rgba(157,218,163,.22) !important;
+      background: rgba(15,30,26,.78) !important;
+      color: var(--lime) !important;
+      text-align: center !important;
+      font-family: "Instrument Sans" !important;
+      font-weight: 600 !important;
+      font-size: 28px !important;
+      letter-spacing: -.01em !important;
+      box-shadow: 0 18px 48px rgba(0,0,0,.28) !important;
+    }
+  `;
+  document.head.appendChild(style);
+
+  const orderBlock = document.querySelector('.order-block');
+  const heroFigure = document.getElementById('heroFigure');
+  if (orderBlock && heroFigure) {
+    orderBlock.appendChild(heroFigure);
+  }
+
+  let activityText = document.getElementById('activityText');
+  if (!activityText) {
+    activityText = document.createElement('div');
+    activityText.id = 'activityText';
+    activityText.className = 'activity-text';
+    activityText.textContent = 'Ready for your order';
+    const hero = document.getElementById('hero');
+    if (hero) hero.appendChild(activityText);
+  }
+
+  const eyebrow = document.getElementById('eyebrow-label');
+  if (eyebrow) eyebrow.textContent = 'cove · r-01 · matcha';
+
+  const orderMetaBig = document.querySelector('.order-meta .big');
+  if (orderMetaBig) orderMetaBig.innerHTML = 'fresh <em>matcha</em>';
+
+  const orderMetaNote = document.querySelector('.order-meta .note');
+  if (orderMetaNote) orderMetaNote.innerHTML = 'single button · automated pour<br>pickup when ready';
+
+  const specs = document.querySelectorAll('.specs div');
+  if (specs.length >= 3) {
+    specs[0].innerHTML = 'drink<span>matcha</span>';
+    specs[1].innerHTML = 'eta<span>~45s</span>';
+    specs[2].innerHTML = 'pickup<span>auto</span>';
+  }
+
+  const receiptLines = document.querySelectorAll('.receipt .line');
+  receiptLines.forEach((line) => {
+    const label = line.querySelector('span');
+    const value = line.querySelector('b');
+    if (!label || !value) return;
+    if (label.textContent.trim() === 'volume') value.textContent = '240ml matcha';
+  });
+}
 
 function fit() {
   const c = document.getElementById('canvas');
@@ -167,6 +297,51 @@ function beep(nextState) {
   }
 }
 
+async function announceCompletion(name) {
+  if (!name) return;
+  try {
+    const response = await fetch(API_BASE + '/api/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      cache: 'no-store',
+      body: JSON.stringify({ text: `${name}, order completed` }),
+    });
+    if (!response.ok) {
+      let detail = response.statusText;
+      try {
+        const payload = await response.json();
+        detail = payload.error || detail;
+      } catch (err) {
+        console.debug(err);
+      }
+      throw new Error(detail || `tts failed: ${response.status}`);
+    }
+
+    const audioBlob = await response.blob();
+    const audioUrl = URL.createObjectURL(audioBlob);
+
+    if (activeAnnouncementAudio) {
+      try {
+        activeAnnouncementAudio.pause();
+        if (activeAnnouncementAudio.dataset.objectUrl) {
+          URL.revokeObjectURL(activeAnnouncementAudio.dataset.objectUrl);
+        }
+      } catch (err) {
+        console.debug(err);
+      }
+    }
+
+    const audio = new Audio(audioUrl);
+    audio.dataset.objectUrl = audioUrl;
+    audio.addEventListener('ended', () => URL.revokeObjectURL(audioUrl), { once: true });
+    audio.addEventListener('error', () => URL.revokeObjectURL(audioUrl), { once: true });
+    activeAnnouncementAudio = audio;
+    await audio.play();
+  } catch (err) {
+    console.warn('Unable to play ElevenLabs announcement.', err);
+  }
+}
+
 function applyState(nextState, force = false) {
   state = nextState;
   const stateChanged = force || lastAppliedState !== nextState;
@@ -178,15 +353,26 @@ function applyState(nextState, force = false) {
   hero.classList.add('state-' + nextState);
 
   const label = LABELS[nextState] || LABELS.idle;
-  document.getElementById('headline').innerHTML = label.headline || tw.headline;
-  document.getElementById('sub').innerHTML = label.sub || 'Tap the button and the arm will bring you <b>ceremonial grade matcha</b>. <b>Backend controlled.</b>';
+  const isCompletedMine = nextState === 'arrived' && currentOrder && currentOrder.isMe;
+  document.getElementById('headline').innerHTML = isCompletedMine
+    ? `${escapeHtml(currentOrder.name)} <em>order completed</em>.`
+    : (label.headline || tw.headline);
+  document.getElementById('sub').innerHTML = isCompletedMine
+    ? ''
+    : (label.sub || 'Press the button and Cove will prepare your matcha.');
   document.getElementById('statustag').textContent = label.tag;
   document.getElementById('sysstatus').textContent = label.status;
+  const activityText = document.getElementById('activityText');
+  if (activityText) {
+    activityText.textContent = isCompletedMine
+      ? `${currentOrder.name} order completed`
+      : (label.activity || 'Ready for your order');
+  }
 
   const eyebrow = document.getElementById('eyebrow-label');
   eyebrow.textContent = currentOrder && nextState !== 'idle'
     ? `order #${currentOrder.id} - ${currentOrder.name}`
-    : 'cove - r-01 - ceremonial grade';
+    : 'cove · r-01 · matcha';
 
   const sysdot = document.getElementById('sysdot');
   sysdot.classList.remove('idle', 'err');
@@ -214,14 +400,14 @@ function applyState(nextState, force = false) {
   setFillProgress(nextState === 'pouring' ? remotePhaseProgress : 0);
 
   const overlay = document.getElementById('overlay');
-  if (nextState === 'arrived' && currentOrder && currentOrder.isMe) {
-    document.getElementById('receiptGreeting').innerHTML = `thanks, <em>${escapeHtml(currentOrder.name)}.</em>`;
-    document.getElementById('receiptSlot').textContent = String(currentOrder.slot || 0).padStart(2, '0');
-    document.getElementById('receiptId').textContent = '#' + currentOrder.id;
-    document.getElementById('receiptTime').textContent = formatSeconds((lastSnapshot && lastSnapshot.average_cycle_seconds) || 43);
-    overlay.classList.add('show');
-  } else {
-    overlay.classList.remove('show');
+  overlay.classList.remove('show');
+
+  if (isCompletedMine && stateChanged && currentOrder.id !== lastSpokenOrderId) {
+    lastSpokenOrderId = currentOrder.id;
+    void announceCompletion(currentOrder.name);
+  }
+  if (nextState !== 'arrived') {
+    lastSpokenOrderId = null;
   }
 
   renderQueue();
@@ -468,6 +654,7 @@ window.addEventListener('message', (ev) => {
 window.parent.postMessage({ type: '__edit_mode_available' }, '*');
 function persist(edits) { window.parent.postMessage({ type: '__edit_mode_set_keys', edits }, '*'); }
 
+simplifyChrome();
 applyState('idle', true);
 renderQueue();
 renderSlots();
