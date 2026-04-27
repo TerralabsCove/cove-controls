@@ -25,6 +25,10 @@ if [[ -z "$CHIP" ]]; then
   fi
 fi
 
+echo "Driving ${CHIP} line ${PIN} LOW (magnet OFF) for 1s…"
+gpioset "${CHIP}" "${PIN}=0"
+sleep 1
+
 echo "Driving ${CHIP} line ${PIN} HIGH (magnet ON)…"
 echo "Press Ctrl+C to release."
 
