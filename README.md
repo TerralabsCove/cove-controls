@@ -10,8 +10,11 @@ The source tree here is staged from the known-good backup snapshot, including th
 ## Layout
 
 - `src/`: ROS packages for arm, turret, MoveIt, and hardware driver
-- `scripts/pi/`: Pi launch helpers
-- `scripts/ubuntu/`: Ubuntu launch helpers
+- `scripts/pi/` and `scripts/ubuntu/`: launch helpers, grouped by which URDF they bring up:
+  - `simple/`: the original `simple_assembly` arm URDF (no camera mount)
+  - `full/`: the `full_assembly` arm URDF (camera mount included; used by all `plan_to_tag` and `waypoint_runner` scripts via `simple_assembly_tracking`)
+  - `turret/`: the `simple_turret` / `moveitturrettest` URDF
+  - `util/`: URDF-agnostic helpers (camera viewers, topic listers, `tf2_echo` wrappers)
 - `config/pi/`: Pi CycloneDDS configs
 - `config/ubuntu/`: Ubuntu CycloneDDS configs
 
@@ -25,7 +28,7 @@ The source tree here is staged from the known-good backup snapshot, including th
 sudo apt install ros-jazzy-ros2-control ros-jazzy-ros2-controllers
 ```
 
-- `sshpass` installed if you want to use `scripts/pi/dual_launch.sh`
+- `sshpass` installed if you want to use `scripts/pi/turret/dual_launch.sh`
 - Pi user added to `dialout` for motor serial access:
 
 ```bash
@@ -166,14 +169,14 @@ Pi:
 
 ```bash
 cd ~/cove_ros_setup
-./scripts/pi/simple_assembly_pi.sh
+./scripts/pi/simple/simple_assembly_pi.sh
 ```
 
 Ubuntu:
 
 ```bash
 cd ~/cove_ros_setup
-./scripts/ubuntu/simple_assembly_rviz.sh
+./scripts/ubuntu/simple/simple_assembly_rviz.sh
 ```
 
 ### Turret
@@ -182,14 +185,14 @@ Pi:
 
 ```bash
 cd ~/cove_ros_setup
-./scripts/pi/robot_launch.sh
+./scripts/pi/turret/robot_launch.sh
 ```
 
 Ubuntu:
 
 ```bash
 cd ~/cove_ros_setup
-./scripts/ubuntu/rviz_launch.sh
+./scripts/ubuntu/turret/rviz_launch.sh
 ```
 
 ### Turret Visual Only
@@ -198,19 +201,19 @@ Ubuntu:
 
 ```bash
 cd ~/cove_ros_setup
-./scripts/ubuntu/show_robot.sh
+./scripts/ubuntu/turret/show_robot.sh
 ```
 
 Pi:
 
 ```bash
 cd ~/cove_ros_setup
-./scripts/pi/show_robot.sh
+./scripts/pi/turret/show_robot.sh
 ```
 
 ## Dual Launch Script
 
-`scripts/pi/dual_launch.sh` is intentionally sanitized. It does not store credentials in git. Export the required variables first:
+`scripts/pi/turret/dual_launch.sh` is intentionally sanitized. It does not store credentials in git. Export the required variables first:
 
 ```bash
 export REMOTE_USER=parallels
@@ -218,7 +221,7 @@ export REMOTE_HOST=<ubuntu-ip-or-hostname>
 export REMOTE_PASS=<ubuntu-ssh-password>
 export REMOTE_REPO=/home/parallels/cove_ros_setup
 export PI_IP=<pi-tailscale-ip>
-./scripts/pi/dual_launch.sh
+./scripts/pi/turret/dual_launch.sh
 ```
 
 ---
@@ -250,15 +253,15 @@ ros2 topic pub --once /apriltag/plan_captured_tag std_msgs/msg/Empty '{}'
 
 | Script | Mode | Orientation |
 |---|---|---|
-| `scripts/pi/plan_to_tag_pi.sh` | preview (no execute) | normal to tag |
-| `scripts/pi/plan_to_tag_pi_execute.sh` | execute | normal to tag |
-| `scripts/pi/plan_to_tag_pi_position_only.sh` | preview | position only |
-| `scripts/pi/plan_to_tag_pi_execute_position_only.sh` | execute | position only |
+| `scripts/pi/full/plan_to_tag_pi.sh` | preview (no execute) | normal to tag |
+| `scripts/pi/full/plan_to_tag_pi_execute.sh` | execute | normal to tag |
+| `scripts/pi/full/plan_to_tag_pi_position_only.sh` | preview | position only |
+| `scripts/pi/full/plan_to_tag_pi_execute_position_only.sh` | execute | position only |
 
 Ubuntu (RViz):
 
 ```bash
-./scripts/ubuntu/plan_to_tag_rviz.sh
+./scripts/ubuntu/full/plan_to_tag_rviz.sh
 ```
 
 ### Key Parameters
@@ -300,7 +303,7 @@ Waypoints are also stored in `locations.txt` at the repo root (one per line, `tf
 The node refuses to execute any waypoint whose Z is below `min_z` (default `0.0565 m` — the height of `revolute_1_0`, the first base joint, in the root frame). Override at launch:
 
 ```bash
-./scripts/pi/waypoint_runner_pi.sh min_z:=0.10
+./scripts/pi/full/waypoint_runner_pi.sh min_z:=0.10
 ```
 
 ### Scripts
@@ -308,13 +311,13 @@ The node refuses to execute any waypoint whose Z is below `min_z` (default `0.05
 Pi (robot + waypoint node):
 
 ```bash
-./scripts/pi/waypoint_runner_pi.sh
+./scripts/pi/full/waypoint_runner_pi.sh
 ```
 
 Ubuntu (RViz):
 
 ```bash
-./scripts/ubuntu/plan_to_tag_rviz.sh
+./scripts/ubuntu/full/plan_to_tag_rviz.sh
 ```
 
 ### Approving Each Motion
@@ -324,7 +327,7 @@ Ubuntu (RViz):
 **Option B — Terminal on the Pi:** run this in a second terminal alongside `waypoint_runner_pi.sh`:
 
 ```bash
-./scripts/pi/waypoint_approve.sh
+./scripts/pi/full/waypoint_approve.sh
 ```
 
 Press **Enter** to execute each waypoint.
@@ -348,8 +351,8 @@ All waypoints appear as labelled spheres. The current target is bright green; co
 Stream the Cartesian position of the camera frame in the terminal (with correct DDS environment):
 
 ```bash
-./scripts/ubuntu/show_eef_pose.sh                        # root → camera_optical_frame
-./scripts/ubuntu/show_eef_pose.sh root wrist_link        # root → wrist_link
+./scripts/ubuntu/util/show_eef_pose.sh                        # root → camera_optical_frame
+./scripts/ubuntu/util/show_eef_pose.sh root wrist_link        # root → wrist_link
 ```
 
 Output is the `Translation: [x, y, z]` line from `tf2_echo`, filtered for readability.

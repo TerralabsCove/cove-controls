@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="simple_assembly_tracking">
 
-    <xacro:include filename="$(find simple_assembly)/urdf/simple_assembly.urdf" />
+    <xacro:include filename="$(find full_assembly)/urdf/simple_assembly.urdf" />
 
     <link name="camera_link">
         <visual>
@@ -15,9 +15,9 @@
     </link>
 
     <joint name="camera_joint" type="fixed">
-        <parent link="wrist_link"/>
+        <parent link="cam_mount_assy__1_"/>
         <child link="camera_link"/>
-        <origin xyz="0 0 0.055" rpy="0 0 0"/>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
     </joint>
 
     <link name="camera_optical_frame"/>

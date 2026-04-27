@@ -21,7 +21,7 @@
   <exec_depend>sensor_msgs</exec_depend>
   <exec_depend>tf2_ros</exec_depend>
   <exec_depend>visualization_msgs</exec_depend>
-  <exec_depend>simple_assembly</exec_depend>
+  <exec_depend>full_assembly</exec_depend>
   <exec_depend>cove_vision</exec_depend>
   <exec_depend>robot_state_publisher</exec_depend>
   <exec_depend>xacro</exec_depend>
