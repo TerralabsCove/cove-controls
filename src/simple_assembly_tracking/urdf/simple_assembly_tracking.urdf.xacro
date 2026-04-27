@@ -3,11 +3,11 @@
 
     <xacro:include filename="$(find full_assembly)/urdf/simple_assembly.urdf" />
 
-    <!-- Pure frame at the OnShape camera mount; mount mesh already shows the camera body. -->
+    <!-- Camera frame anchored to the small white mount (part_1_17) on top of the mount block. -->
     <link name="camera_link"/>
 
     <joint name="camera_joint" type="fixed">
-        <parent link="cam_mount_assy__1_"/>
+        <parent link="part_1_17"/>
         <child link="camera_link"/>
         <origin xyz="0 0 0" rpy="0 0 0"/>
     </joint>
@@ -15,12 +15,11 @@
     <link name="camera_optical_frame"/>
 
     <!-- ROS optical convention: X=right, Y=down, Z=forward (looking out the lens).
-         Offsets are the camera-perspective offset of the lens centre from the
-         camera_link/cam_mount frame: 17 mm right, 53.6 mm up. -->
+         17 mm offset = lens centre is 17 mm right of the mount centre. -->
     <joint name="camera_optical_joint" type="fixed">
         <parent link="camera_link"/>
         <child link="camera_optical_frame"/>
-        <origin xyz="0.017 -0.0536 0" rpy="0 0 1.5708"/>
+        <origin xyz="0.017 0 0" rpy="0 0 1.5708"/>
     </joint>
 
 </robot>
