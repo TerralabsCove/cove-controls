@@ -1,7 +1,9 @@
 #include "damiao_driver/damiao_hardware_interface.hpp"
 
+#include <cstdlib>
 #include <cstring>
 #include <stdexcept>
+#include <string>
 
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
 #include "pluginlib/class_list_macros.hpp"
@@ -176,19 +178,32 @@ hardware_interface::CallbackReturn DamiaoHardwareInterface::on_activate(
     // and write() sends (logical_cmd + offset) → holds current physical position.
     // hw_positions_ and hw_cmd_positions_ stay 0.0 so the JTC initializes its
     // setpoint to zero and the first write() keeps the motor exactly where it is.
-    for (int attempt = 0; attempt < 5; attempt++) {
-      for (size_t i = 0; i < motors_.size(); i++) {
-        mc_->refresh_motor_status(motors_[i]);
-        zero_offsets_[i] = static_cast<double>(motors_[i].Get_Position());
+    //
+    // Debug bypass: setting env var DAMIAO_SKIP_ZERO_CAPTURE=1 leaves
+    // zero_offsets_ at all zeros, so read() reports raw encoder positions and
+    // ROS sees the actual joint angles directly. Useful for inspecting the
+    // arm's current pose without forcing it to the vertical home first.
+    const char * skip = std::getenv("DAMIAO_SKIP_ZERO_CAPTURE");
+    if (skip && std::string(skip) != "0" && std::string(skip) != "") {
+      RCLCPP_WARN(rclcpp::get_logger("DamiaoHardwareInterface"),
+        "DAMIAO_SKIP_ZERO_CAPTURE set — zero offsets stay at 0; "
+        "ROS will report raw encoder positions. DO NOT execute trajectories "
+        "from this state unless you know what you are doing.");
+    } else {
+      for (int attempt = 0; attempt < 5; attempt++) {
+        for (size_t i = 0; i < motors_.size(); i++) {
+          mc_->refresh_motor_status(motors_[i]);
+          zero_offsets_[i] = static_cast<double>(motors_[i].Get_Position());
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
       }
-      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+      std::string offset_str;
+      for (size_t i = 0; i < zero_offsets_.size(); i++) {
+        offset_str += info_.joints[i].name + "=" + std::to_string(zero_offsets_[i]) + " ";
+      }
+      RCLCPP_INFO(rclcpp::get_logger("DamiaoHardwareInterface"),
+        "Zero offsets captured: %s", offset_str.c_str());
     }
-    std::string offset_str;
-    for (size_t i = 0; i < zero_offsets_.size(); i++) {
-      offset_str += info_.joints[i].name + "=" + std::to_string(zero_offsets_[i]) + " ";
-    }
-    RCLCPP_INFO(rclcpp::get_logger("DamiaoHardwareInterface"),
-      "Zero offsets captured: %s", offset_str.c_str());
 
     motors_ready_ = true;
     RCLCPP_INFO(rclcpp::get_logger("DamiaoHardwareInterface"), "Motors ready.");
