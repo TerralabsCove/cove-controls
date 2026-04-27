@@ -24,6 +24,11 @@ ros2 launch simple_assembly_moveit_config moveit_rviz.launch.py \
   "$@" &
 rviz_pid=$!
 
+sleep 2
+if ! kill -0 "$rviz_pid" 2>/dev/null; then
+  wait "$rviz_pid"
+fi
+
 ros2 run rqt_image_view rqt_image_view /camera/image_raw &
 image_pid=$!
 
