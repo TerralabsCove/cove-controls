@@ -372,4 +372,8 @@ Output is the `Translation: [x, y, z]` line from `tf2_echo`, filtered for readab
 - The repo is meant to be built directly as the workspace root.
 - Do not commit `build/`, `install/`, or `log/`.
 - The working hardware driver state comes from the Pi backup snapshot, not the stale local copy that lacked the crash fix.
+
+## What went wrong(electrical edition)
+
 - DOUBLE CHECK IF ANY CAN CONNECTORS ARE FLIPPED. SOMETIMES THEY CAME FLIPPED
+- CHECK THE PORTS ON THE MOTORS. THEY COULD BE LOOSE CAUSING ISSUES.
