@@ -39,12 +39,24 @@ original serial `damiao_driver` config:
 ./scripts/pi/canhat/plan_to_tag_execute.sh
 ```
 
+Before using the CAN HAT MoveIt scripts, put the arm in the straight-line zero
+pose and write that pose into the DM motors:
+
+```bash
+./scripts/pi/canhat/zero_straight_position.sh
+```
+
+The CAN HAT ros2_control configs use the motor-stored zero directly
+(`capture_zero_on_activate=false`) instead of capturing a software offset on
+each launch. This is intentionally only enabled in the CAN HAT configs.
+
 The CAN HAT MoveIt config defaults to:
 
 - `can_interface=can1`
 - `control_mode=position` mapped internally to DM `POS_VEL_MODE`
 - `switch_mode_on_activate=true`
-- `revolute_7_0=DM4340:0x01:0x11` for the current small bench motor
+- `capture_zero_on_activate=false`
+- full-arm IDs `0x01..0x07` with feedback IDs `0x11..0x17`
 
 The original `scripts/pi/simple` and `scripts/pi/full` scripts still use the
 serial-compatible MoveIt configs.

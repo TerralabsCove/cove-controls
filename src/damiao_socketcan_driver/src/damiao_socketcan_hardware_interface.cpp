@@ -30,6 +30,10 @@ hardware_interface::CallbackReturn DamiaoSocketCanHardwareInterface::on_init(
     switch_mode_on_activate_ = info_.hardware_parameters.at("switch_mode_on_activate") == "true" ||
       info_.hardware_parameters.at("switch_mode_on_activate") == "1";
   }
+  if (info_.hardware_parameters.count("capture_zero_on_activate")) {
+    capture_zero_on_activate_ = info_.hardware_parameters.at("capture_zero_on_activate") == "true" ||
+      info_.hardware_parameters.at("capture_zero_on_activate") == "1";
+  }
 
   can_ = std::make_shared<damiao_socketcan::SocketCan>(can_interface_);
   mc_ = std::make_unique<damiao_socketcan::MotorControl>(can_);
@@ -131,11 +135,14 @@ hardware_interface::CallbackReturn DamiaoSocketCanHardwareInterface::on_activate
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
-    const char * skip = std::getenv("DAMIAO_SKIP_ZERO_CAPTURE");
-    if (skip && std::string(skip) != "0" && std::string(skip) != "") {
+    const char * skip_env = std::getenv("DAMIAO_SKIP_ZERO_CAPTURE");
+    const bool skip_zero_capture =
+      !capture_zero_on_activate_ ||
+      (skip_env && std::string(skip_env) != "0" && std::string(skip_env) != "");
+    if (skip_zero_capture) {
       RCLCPP_WARN(
         logger,
-        "DAMIAO_SKIP_ZERO_CAPTURE set: zero offsets stay at 0 and raw encoder positions are reported.");
+        "Zero capture disabled: zero offsets stay at 0 and motor-stored positions are reported.");
     } else {
       for (int attempt = 0; attempt < 5; ++attempt) {
         for (size_t i = 0; i < motors_.size(); ++i) {
