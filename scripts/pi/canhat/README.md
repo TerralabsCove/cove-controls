@@ -137,6 +137,20 @@ For custom sequences, pass explicit per-step magnet actions when needed:
 MAGNET_ACTIONS=comment,none,none,comment WAYPOINT_SEQUENCE=3,4,6,7 ./scripts/pi/canhat/run_recorded_path.sh
 ```
 
+## End-Effector Path Replay
+
+For pose-only JSONL files captured with `record_waypoints_readonly.sh`, use:
+
+```bash
+./scripts/pi/canhat/run_eef_path.sh recorded_waypoints/canhat_eef_waypoints.jsonl
+```
+
+This sends each recorded Cartesian pose through MoveIt `/move_action` using the
+recorded end-effector frame, usually `camera_optical_frame`. It pauses before
+each JSONL line so you can approve the move. Comments are treated as comments
+unless they start with `!`; supported commands are `!magnet on` and
+`!magnet off`, which execute after that line's pose move.
+
 ## Raw CAN Diagnostics
 
 These scripts do not use ROS. They are for checking which DM motor IDs are
