@@ -1,0 +1,4 @@
+- Rotation: in Quaternion (xyzw) [0.720, -0.694, 0.011, -0.011]
+- Rotation: in RPY (radian) [-3.111, -0.001, -1.534]
+- Rotation: in RPY (degree) [-178.262, -0.061, -87.892]
+
