@@ -80,8 +80,8 @@ Run this while the CAN HAT robot launch is publishing `/joint_states` and TF:
 ./scripts/pi/canhat/record_waypoints.sh
 ```
 
-If you only want to read motor positions without enabling the motors, use the
-read-only wrapper instead:
+If you want to manually move the arm and record only the MoveIt end-effector
+pose without enabling the motors, use the read-only wrapper instead:
 
 ```bash
 ./scripts/pi/canhat/record_waypoints_readonly.sh
@@ -89,10 +89,12 @@ read-only wrapper instead:
 
 It starts the CAN HAT driver in `control_mode=status` with `auto_enable=false`,
 `switch_mode_on_start=false`, and `disable_on_shutdown=false`, then starts the
-CAN HAT robot_state_publisher so TF is available.
+CAN HAT robot_state_publisher so TF is available. It records only `root ->
+camera_optical_frame` Cartesian position and quaternion to
+`recorded_waypoints/canhat_eef_waypoints.jsonl`.
 
-Each time you press Enter, the script appends the latest motor joint positions
-and end-effector TF quaternions to
+Each time you press Enter, `record_waypoints.sh` appends the latest motor joint
+positions and end-effector TF quaternions to
 `recorded_waypoints/canhat_waypoints.jsonl`. Type text before pressing Enter to
 save that text as the waypoint comment. Type `q`, `quit`, or `exit` to stop.
 
