@@ -34,6 +34,16 @@ hardware_interface::CallbackReturn DamiaoSocketCanHardwareInterface::on_init(
     capture_zero_on_activate_ = info_.hardware_parameters.at("capture_zero_on_activate") == "true" ||
       info_.hardware_parameters.at("capture_zero_on_activate") == "1";
   }
+  if (info_.hardware_parameters.count("suppress_initial_writes")) {
+    suppress_initial_writes_ = info_.hardware_parameters.at("suppress_initial_writes") == "true" ||
+      info_.hardware_parameters.at("suppress_initial_writes") == "1";
+  }
+  if (info_.hardware_parameters.count("command_position_deadband")) {
+    command_position_deadband_ = std::stod(info_.hardware_parameters.at("command_position_deadband"));
+  }
+  if (info_.hardware_parameters.count("command_velocity_deadband")) {
+    command_velocity_deadband_ = std::stod(info_.hardware_parameters.at("command_velocity_deadband"));
+  }
 
   can_ = std::make_shared<damiao_socketcan::SocketCan>(can_interface_);
   mc_ = std::make_unique<damiao_socketcan::MotorControl>(can_);
@@ -47,6 +57,7 @@ hardware_interface::CallbackReturn DamiaoSocketCanHardwareInterface::on_init(
   hw_cmd_positions_.assign(n, 0.0);
   hw_cmd_velocities_.assign(n, 0.0);
   zero_offsets_.assign(n, 0.0);
+  startup_cmd_positions_.assign(n, 0.0);
 
   for (size_t i = 0; i < n; ++i) {
     const auto & joint = info_.joints[i];
@@ -100,6 +111,8 @@ hardware_interface::CallbackReturn DamiaoSocketCanHardwareInterface::on_activate
   const rclcpp_lifecycle::State & /*previous_state*/)
 {
   motors_ready_ = false;
+  writes_enabled_ = false;
+  initial_write_suppression_logged_ = false;
 
   damiao_socketcan::Control_Mode dm_mode = damiao_socketcan::POS_VEL_MODE;
   if (control_mode_ != "position") {
@@ -159,6 +172,26 @@ hardware_interface::CallbackReturn DamiaoSocketCanHardwareInterface::on_activate
     }
     RCLCPP_INFO(logger, "Zero offsets: %s", offsets.c_str());
 
+    for (int attempt = 0; attempt < 5; ++attempt) {
+      for (size_t i = 0; i < motors_.size(); ++i) {
+        mc_->refresh_motor_status(motors_[i]);
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+
+    for (size_t i = 0; i < motors_.size(); ++i) {
+      hw_positions_[i] = static_cast<double>(motors_[i].Get_Position()) - zero_offsets_[i];
+      hw_velocities_[i] = static_cast<double>(motors_[i].Get_Velocity());
+      hw_efforts_[i] = static_cast<double>(motors_[i].Get_tau());
+      hw_cmd_positions_[i] = hw_positions_[i];
+      hw_cmd_velocities_[i] = 0.0;
+      startup_cmd_positions_[i] = hw_positions_[i];
+    }
+    RCLCPP_INFO(
+      logger,
+      "Command positions seeded from live feedback; startup writes are %s.",
+      suppress_initial_writes_ ? "suppressed until a non-hold command arrives" : "not suppressed");
+
     motors_ready_ = true;
     RCLCPP_INFO(logger, "SocketCAN motors ready.");
   });
@@ -178,6 +211,7 @@ hardware_interface::CallbackReturn DamiaoSocketCanHardwareInterface::on_deactiva
     init_thread_.join();
   }
   motors_ready_ = false;
+  writes_enabled_ = false;
   for (auto & motor : motors_) {
     try {
       mc_->disable(motor);
@@ -200,6 +234,11 @@ hardware_interface::return_type DamiaoSocketCanHardwareInterface::read(
     hw_positions_[i] = static_cast<double>(motors_[i].Get_Position()) - zero_offsets_[i];
     hw_velocities_[i] = static_cast<double>(motors_[i].Get_Velocity());
     hw_efforts_[i] = static_cast<double>(motors_[i].Get_tau());
+    if (suppress_initial_writes_ && !writes_enabled_) {
+      hw_cmd_positions_[i] = hw_positions_[i];
+      hw_cmd_velocities_[i] = 0.0;
+      startup_cmd_positions_[i] = hw_positions_[i];
+    }
   }
   return hardware_interface::return_type::OK;
 }
@@ -209,6 +248,21 @@ hardware_interface::return_type DamiaoSocketCanHardwareInterface::write(
 {
   if (!motors_ready_) {
     return hardware_interface::return_type::OK;
+  }
+
+  if (suppress_initial_writes_ && !writes_enabled_) {
+    if (!command_requests_motion()) {
+      if (!initial_write_suppression_logged_.exchange(true)) {
+        RCLCPP_WARN(
+          rclcpp::get_logger("DamiaoSocketCanHardwareInterface"),
+          "Suppressing CAN HAT motor writes until a non-hold command arrives.");
+      }
+      return hardware_interface::return_type::OK;
+    }
+    writes_enabled_ = true;
+    RCLCPP_WARN(
+      rclcpp::get_logger("DamiaoSocketCanHardwareInterface"),
+      "First non-hold command received; enabling CAN HAT motor writes.");
   }
 
   for (size_t i = 0; i < motors_.size(); ++i) {
@@ -224,6 +278,42 @@ hardware_interface::return_type DamiaoSocketCanHardwareInterface::write(
     }
   }
   return hardware_interface::return_type::OK;
+}
+
+bool DamiaoSocketCanHardwareInterface::command_requests_motion() const
+{
+  if (control_mode_ == "velocity") {
+    for (const auto velocity : hw_cmd_velocities_) {
+      if (std::abs(velocity) > command_velocity_deadband_) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool changed_from_startup_hold = false;
+  bool nonzero_position_command = false;
+  bool nonzero_velocity_command = false;
+  for (size_t i = 0; i < hw_cmd_positions_.size(); ++i) {
+    if (std::abs(hw_cmd_positions_[i] - startup_cmd_positions_[i]) > command_position_deadband_) {
+      changed_from_startup_hold = true;
+    }
+    if (std::abs(hw_cmd_positions_[i]) > command_position_deadband_) {
+      nonzero_position_command = true;
+    }
+    if (i < hw_cmd_velocities_.size() &&
+      std::abs(hw_cmd_velocities_[i]) > command_velocity_deadband_)
+    {
+      nonzero_velocity_command = true;
+    }
+  }
+
+  if (!changed_from_startup_hold && !nonzero_velocity_command) {
+    return false;
+  }
+
+  // A full-zero command during startup is the dangerous case this guard blocks.
+  return nonzero_position_command || nonzero_velocity_command;
 }
 
 }  // namespace damiao_socketcan_driver

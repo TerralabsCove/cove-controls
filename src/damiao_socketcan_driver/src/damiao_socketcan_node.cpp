@@ -207,7 +207,12 @@ private:
   {
     for (size_t i = 0; i < motors_.size(); ++i) {
       try {
-        if (control_mode_ == "velocity") {
+        if (!commands_active_ &&
+          (control_mode_ == "velocity" || control_mode_ == "pos_vel" ||
+          control_mode_ == "position" || control_mode_ == "mit"))
+        {
+          mc_->refresh_motor_status(motors_[i]);
+        } else if (control_mode_ == "velocity") {
           mc_->control_vel(motors_[i], cmd_vel_[i]);
         } else if (control_mode_ == "pos_vel" || control_mode_ == "position") {
           mc_->control_pos_vel(motors_[i], cmd_pos_[i], cmd_vel_[i]);
@@ -244,6 +249,7 @@ private:
     for (size_t i = 0; i < std::min(msg->data.size(), motors_.size()); ++i) {
       cmd_vel_[i] = static_cast<float>(msg->data[i]);
     }
+    commands_active_ = true;
   }
 
   void pos_vel_callback(const std_msgs::msg::Float64MultiArray::SharedPtr msg)
@@ -252,6 +258,7 @@ private:
       cmd_pos_[i] = static_cast<float>(msg->data[i * 2]);
       cmd_vel_[i] = static_cast<float>(msg->data[i * 2 + 1]);
     }
+    commands_active_ = true;
   }
 
   void mit_callback(const std_msgs::msg::Float64MultiArray::SharedPtr msg)
@@ -264,6 +271,7 @@ private:
       cmd_mit_dq_[i] = static_cast<float>(msg->data[base + 3]);
       cmd_mit_tau_[i] = static_cast<float>(msg->data[base + 4]);
     }
+    commands_active_ = true;
   }
 
   void enable_service(
@@ -303,6 +311,7 @@ private:
   bool auto_enable_ = false;
   bool switch_mode_on_start_ = false;
   bool disable_on_shutdown_ = true;
+  bool commands_active_ = false;
 
   damiao_socketcan::SocketCan::SharedPtr can_;
   std::unique_ptr<damiao_socketcan::MotorControl> mc_;

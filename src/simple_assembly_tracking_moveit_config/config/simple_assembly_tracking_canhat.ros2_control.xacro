@@ -9,6 +9,7 @@
                 <param name="control_mode">position</param>
                 <param name="switch_mode_on_activate">true</param>
                 <param name="capture_zero_on_activate">false</param>
+                <param name="suppress_initial_writes">true</param>
             </hardware>
 
             <!-- Joint 1 (base): Z-axis, bottom motor -->

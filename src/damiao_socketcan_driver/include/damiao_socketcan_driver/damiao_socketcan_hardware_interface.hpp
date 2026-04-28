@@ -42,6 +42,9 @@ private:
   std::string control_mode_ = "pos_vel";
   bool switch_mode_on_activate_ = true;
   bool capture_zero_on_activate_ = true;
+  bool suppress_initial_writes_ = true;
+  double command_position_deadband_ = 1e-4;
+  double command_velocity_deadband_ = 1e-4;
 
   damiao_socketcan::SocketCan::SharedPtr can_;
   std::unique_ptr<damiao_socketcan::MotorControl> mc_;
@@ -53,9 +56,14 @@ private:
   std::vector<double> hw_cmd_positions_;
   std::vector<double> hw_cmd_velocities_;
   std::vector<double> zero_offsets_;
+  std::vector<double> startup_cmd_positions_;
 
   std::thread init_thread_;
   std::atomic<bool> motors_ready_{false};
+  std::atomic<bool> writes_enabled_{false};
+  std::atomic<bool> initial_write_suppression_logged_{false};
+
+  bool command_requests_motion() const;
 };
 
 }  // namespace damiao_socketcan_driver

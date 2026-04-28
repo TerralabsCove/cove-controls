@@ -6,6 +6,10 @@ Start the one-motor SocketCAN driver on the Pi:
 ./scripts/pi/canhat/one_motor_driver.sh
 ```
 
+The standalone driver publishes status only until a command topic message is
+received. Starting it or calling `enable_motor.sh` should not send a hidden
+zero-velocity or zero-position command.
+
 Then, from another Pi terminal, enable/disable or do a short velocity spin:
 
 ```bash
@@ -56,7 +60,14 @@ The CAN HAT MoveIt config defaults to:
 - `control_mode=position` mapped internally to DM `POS_VEL_MODE`
 - `switch_mode_on_activate=true`
 - `capture_zero_on_activate=false`
+- `suppress_initial_writes=true`
 - full-arm IDs `0x01..0x07` with feedback IDs `0x11..0x17`
+
+On startup, the CAN HAT hardware interface seeds command positions from live
+motor feedback and suppresses DM control writes until a non-hold command
+arrives. Launching `plan_to_tag.sh`, `tracking_moveit.sh`, or
+`simple_assembly_moveit.sh` should initialize/enable/read feedback, but should
+not command the arm to zero by itself.
 
 The original `scripts/pi/simple` and `scripts/pi/full` scripts still use the
 serial-compatible MoveIt configs.
