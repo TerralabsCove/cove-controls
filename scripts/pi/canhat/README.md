@@ -48,3 +48,27 @@ The CAN HAT MoveIt config defaults to:
 
 The original `scripts/pi/simple` and `scripts/pi/full` scripts still use the
 serial-compatible MoveIt configs.
+
+## Raw CAN Diagnostics
+
+These scripts do not use ROS. They are for checking which DM motor IDs are
+actually responding on the CAN HAT:
+
+```bash
+./scripts/pi/canhat/raw_scan_ids.sh
+./scripts/pi/canhat/raw_enable_disable_all_ids.sh
+```
+
+Defaults are `CAN_INTERFACE=can1` and IDs `0x01..0x07`. Override them inline:
+
+```bash
+START_ID=1 END_ID=7 ./scripts/pi/canhat/raw_scan_ids.sh
+ACTION=cycle LEAVE_ENABLED=0 ./scripts/pi/canhat/raw_enable_disable_all_ids.sh
+```
+
+`raw_scan_ids.sh` only sends DM status requests. `raw_enable_disable_all_ids.sh`
+can run `ACTION=cycle`, `ACTION=enable`, or `ACTION=disable`; the default cycle
+disables, enables, requests status, then disables again.
+
+If a scan reports zero raw capture lines and the CAN state is `ERROR-PASSIVE`,
+the Pi sent frames but nothing on that bus ACKed them.
