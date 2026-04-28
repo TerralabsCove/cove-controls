@@ -69,6 +69,17 @@ Run this while the CAN HAT robot launch is publishing `/joint_states` and TF:
 ./scripts/pi/canhat/record_waypoints.sh
 ```
 
+If you only want to read motor positions without enabling the motors, use the
+read-only wrapper instead:
+
+```bash
+./scripts/pi/canhat/record_waypoints_readonly.sh
+```
+
+It starts the CAN HAT driver in `control_mode=status` with `auto_enable=false`,
+`switch_mode_on_start=false`, and `disable_on_shutdown=false`, then starts the
+CAN HAT robot_state_publisher so TF is available.
+
 Each time you press Enter, the script appends the latest motor joint positions
 and end-effector TF quaternions to
 `recorded_waypoints/canhat_waypoints.jsonl`. Type text before pressing Enter to
@@ -79,6 +90,38 @@ By default it records transforms from `root` to both `wrist_link` and
 
 ```bash
 OUTPUT=/tmp/arm_path.jsonl ./scripts/pi/canhat/record_waypoints.sh --target-frame wrist_link
+```
+
+## Recorded Path Replay
+
+Start the CAN HAT ros2_control robot in one terminal:
+
+```bash
+./scripts/pi/canhat/tracking_moveit.sh
+```
+
+Then replay the recorded symmetric pouring path in another terminal:
+
+```bash
+./scripts/pi/canhat/run_recorded_path.sh
+```
+
+The default sequence is waypoint `7 -> 6 -> 5 -> 6 -> 7` from
+`recorded_waypoints/canhat_waypoints.jsonl`. The default magnet actions are
+`on -> none -> none -> none -> off`, so the first `7` turns GPIO17 on and the
+final `7` releases it. The runner pauses before each waypoint so you can review
+before pressing Enter.
+
+Override the sequence or speed inline:
+
+```bash
+WAYPOINT_SEQUENCE=3,4,6,7 MOVE_DURATION=6.0 ./scripts/pi/canhat/run_recorded_path.sh
+```
+
+For custom sequences, pass explicit per-step magnet actions when needed:
+
+```bash
+MAGNET_ACTIONS=comment,none,none,comment WAYPOINT_SEQUENCE=3,4,6,7 ./scripts/pi/canhat/run_recorded_path.sh
 ```
 
 ## Raw CAN Diagnostics
