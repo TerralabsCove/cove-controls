@@ -61,6 +61,26 @@ The CAN HAT MoveIt config defaults to:
 The original `scripts/pi/simple` and `scripts/pi/full` scripts still use the
 serial-compatible MoveIt configs.
 
+## Waypoint Recording
+
+Run this while the CAN HAT robot launch is publishing `/joint_states` and TF:
+
+```bash
+./scripts/pi/canhat/record_waypoints.sh
+```
+
+Each time you press Enter, the script appends the latest motor joint positions
+and end-effector TF quaternions to
+`recorded_waypoints/canhat_waypoints.jsonl`. Type text before pressing Enter to
+save that text as the waypoint comment. Type `q`, `quit`, or `exit` to stop.
+
+By default it records transforms from `root` to both `wrist_link` and
+`camera_optical_frame`. Override the file or frames inline:
+
+```bash
+OUTPUT=/tmp/arm_path.jsonl ./scripts/pi/canhat/record_waypoints.sh --target-frame wrist_link
+```
+
 ## Raw CAN Diagnostics
 
 These scripts do not use ROS. They are for checking which DM motor IDs are

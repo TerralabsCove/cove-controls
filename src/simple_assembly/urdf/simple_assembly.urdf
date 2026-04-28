@@ -362,7 +362,7 @@
     </joint>
     <!-- revolute_7_0: Z-type (DM10010), wrist/tip — +/-360 deg from home -->
     <joint name="revolute_7_0" type="revolute">
-        <origin xyz="0 0 0" rpy="0 0 0" />
+        <origin xyz="0 0 0" rpy="0 0 1.5708" />
         <axis xyz="0 0 1" />
         <parent link="part_1_8" />
         <child link="wrist_link" />

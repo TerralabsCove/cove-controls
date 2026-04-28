@@ -28,3 +28,16 @@ Use these on the Ubuntu/RViz machine with the CAN HAT ros2_control variants:
 
 The old `scripts/ubuntu/simple` and `scripts/ubuntu/full` RViz scripts are left
 unchanged for the serial-compatible MoveIt configs.
+
+## Waypoint Recording
+
+If `/joint_states` and TF are visible on the Ubuntu/RViz machine, you can record
+the same JSONL waypoint file from Ubuntu:
+
+```bash
+./scripts/ubuntu/canhat/record_waypoints.sh
+```
+
+Press Enter to append a waypoint, or type a comment and press Enter. The default
+output is `recorded_waypoints/canhat_waypoints.jsonl`; override with `OUTPUT=...`
+if needed.
