@@ -16,7 +16,9 @@ CAN_INTERFACE="${CAN_INTERFACE:-can1}"
 LOOP_RATE="${LOOP_RATE:-50.0}"
 MOTOR_SPEC="${MOTOR_SPEC:-revolute_1_0:DM4340:0x01:0x11,revolute_2_0:DM10010:0x02:0x12,revolute_3_0:DM4340:0x03:0x13,revolute_4_0:DM10010:0x04:0x14,revolute_5_0:DM4340:0x05:0x15,revolute_6_0:DM10010:0x06:0x16,revolute_7_0:DM4340:0x07:0x17}"
 EEF_FRAME="${EEF_FRAME:-camera_optical_frame}"
-OUTPUT="${OUTPUT:-$REPO_ROOT/recorded_waypoints/canhat_eef_waypoints.jsonl}"
+STAMP="$(date +%Y%m%d_%H%M%S)"
+OUTPUT="${OUTPUT:-$REPO_ROOT/recorded_waypoints/canhat_joint_waypoints_${STAMP}.jsonl}"
+LATEST_LINK="$REPO_ROOT/recorded_waypoints/canhat_joint_waypoints_latest.jsonl"
 
 cleanup() {
   kill "${driver_pid:-}" "${rsp_pid:-}" 2>/dev/null || true
@@ -50,8 +52,12 @@ if ! kill -0 "$rsp_pid" 2>/dev/null; then
   wait "$rsp_pid"
 fi
 
+mkdir -p "$(dirname "$OUTPUT")"
+ln -sfn "$OUTPUT" "$LATEST_LINK"
+echo "Recording to $OUTPUT"
+echo "Latest link: $LATEST_LINK"
+
 python3 "$REPO_ROOT/scripts/common/record_waypoints.py" \
   --output "$OUTPUT" \
-  --pose-only \
   --target-frame "$EEF_FRAME" \
   "$@"

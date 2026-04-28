@@ -80,8 +80,8 @@ Run this while the CAN HAT robot launch is publishing `/joint_states` and TF:
 ./scripts/pi/canhat/record_waypoints.sh
 ```
 
-If you want to manually move the arm and record only the MoveIt end-effector
-pose without enabling the motors, use the read-only wrapper instead:
+If you want to manually move the arm and record joint positions without
+enabling the motors, use the read-only wrapper instead:
 
 ```bash
 ./scripts/pi/canhat/record_waypoints_readonly.sh
@@ -89,14 +89,15 @@ pose without enabling the motors, use the read-only wrapper instead:
 
 It starts the CAN HAT driver in `control_mode=status` with `auto_enable=false`,
 `switch_mode_on_start=false`, and `disable_on_shutdown=false`, then starts the
-CAN HAT robot_state_publisher so TF is available. It records only `root ->
-camera_optical_frame` Cartesian position and quaternion to
-`recorded_waypoints/canhat_eef_waypoints.jsonl`.
+CAN HAT robot_state_publisher so TF is available. It records the latest motor
+joint positions plus `root -> camera_optical_frame` pose to a timestamped file
+like `recorded_waypoints/canhat_joint_waypoints_YYYYmmdd_HHMMSS.jsonl`, and
+updates `recorded_waypoints/canhat_joint_waypoints_latest.jsonl`.
 
-Each time you press Enter, `record_waypoints.sh` appends the latest motor joint
-positions and end-effector TF quaternions to
-`recorded_waypoints/canhat_waypoints.jsonl`. Type text before pressing Enter to
-save that text as the waypoint comment. Type `q`, `quit`, or `exit` to stop.
+Each time you press Enter, the recorder appends a waypoint. Type text before
+pressing Enter to save that text as the waypoint comment. Type `q`, `quit`, or
+`exit` to stop. Comments are only commands during replay if they begin with
+`!`, for example `!magnet on` or `!magnet off`.
 
 By default it records transforms from `root` to both `wrist_link` and
 `camera_optical_frame`. Override the file or frames inline:
@@ -113,28 +114,23 @@ Start the CAN HAT ros2_control robot in one terminal:
 ./scripts/pi/canhat/tracking_moveit.sh
 ```
 
-Then replay the recorded symmetric pouring path in another terminal:
+Then replay the latest read-only joint path in another terminal:
 
 ```bash
 ./scripts/pi/canhat/run_recorded_path.sh
 ```
 
-The default sequence is waypoint `7 -> 6 -> 5 -> 6 -> 7` from
-`recorded_waypoints/canhat_waypoints.jsonl`. The default magnet actions are
-`on -> none -> none -> none -> off`, so the first `7` turns GPIO17 on and the
-final `7` releases it. The runner pauses before each waypoint so you can review
-before pressing Enter.
+By default this reads
+`recorded_waypoints/canhat_joint_waypoints_latest.jsonl` and executes all valid
+joint-position waypoints in file order. The runner pauses before each waypoint
+so you can review before pressing Enter. `!magnet on` and `!magnet off`
+comments execute after that waypoint's move; other comments are ignored by the
+runner.
 
-Override the sequence or speed inline:
-
-```bash
-WAYPOINT_SEQUENCE=3,4,6,7 MOVE_DURATION=6.0 ./scripts/pi/canhat/run_recorded_path.sh
-```
-
-For custom sequences, pass explicit per-step magnet actions when needed:
+Override the file, sequence, or speed inline:
 
 ```bash
-MAGNET_ACTIONS=comment,none,none,comment WAYPOINT_SEQUENCE=3,4,6,7 ./scripts/pi/canhat/run_recorded_path.sh
+WAYPOINT_FILE=recorded_waypoints/canhat_waypoints.jsonl WAYPOINT_SEQUENCE=7,6,5,6,7 MOVE_DURATION=6.0 ./scripts/pi/canhat/run_recorded_path.sh
 ```
 
 ## End-Effector Path Replay

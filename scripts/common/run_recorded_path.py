@@ -135,24 +135,51 @@ def seconds_to_duration(seconds: float) -> Duration:
     return Duration(sec=whole, nanosec=nanosec)
 
 
-def load_records(path: Path) -> dict[int, dict[str, Any]]:
-    records: dict[int, dict[str, Any]] = {}
+def load_records(path: Path) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
     with path.open("r", encoding="utf-8") as stream:
         for line_no, line in enumerate(stream, start=1):
             line = line.strip()
             if not line:
                 continue
             record = json.loads(line)
-            index = int(record.get("index", line_no - 1))
-            records[index] = record
+            record["_line_no"] = line_no
+            record["_index"] = int(record.get("index", line_no - 1))
+            records.append(record)
     return records
 
 
 def parse_sequence(value: str) -> list[int]:
+    if not value.strip():
+        return []
     sequence = [int(item.strip(), 0) for item in value.split(",") if item.strip()]
     if not sequence:
         raise ValueError("sequence cannot be empty")
     return sequence
+
+
+def select_waypoints(
+    records: list[dict[str, Any]],
+    sequence: list[int],
+) -> list[tuple[int, dict[str, Any], list[float]]]:
+    if sequence:
+        by_index = {record["_index"]: record for record in records}
+        return [
+            (index, by_index[index], positions_from_record(by_index[index]))
+            for index in sequence
+        ]
+
+    waypoints: list[tuple[int, dict[str, Any], list[float]]] = []
+    for record in records:
+        try:
+            waypoints.append(
+                (record["_index"], record, positions_from_record(record))
+            )
+        except ValueError:
+            continue
+    if not waypoints:
+        raise ValueError("No records with full joint positions were found")
+    return waypoints
 
 
 def parse_magnet_actions(value: str, sequence_len: int) -> list[str | None]:
@@ -210,32 +237,36 @@ def positions_from_record(record: dict[str, Any]) -> list[float]:
 
 
 def infer_magnet_action(comment: str) -> str | None:
-    text = comment.lower()
-    if "magnet" not in text:
+    text = comment.strip().lower()
+    if not text.startswith("!"):
         return None
-    if "release" in text or "off" in text or "disable" in text:
-        return "off"
-    if "on" in text or "enable" in text:
+    tokens = text[1:].strip().split()
+    if len(tokens) >= 2 and tokens[0] == "magnet" and tokens[1] == "on":
         return "on"
+    if len(tokens) >= 2 and tokens[0] == "magnet" and tokens[1] == "off":
+        return "off"
+    raise ValueError(f"Unsupported command comment: {comment!r}")
     return None
 
 
 def waypoint_summary(record: dict[str, Any], positions: list[float]) -> str:
-    index = record.get("index")
+    index = record.get("_index", record.get("index"))
     comment = str(record.get("comment", "")).strip()
     joint_text = " ".join(
         f"{name.replace('revolute_', 'j')}={position:+.3f}"
         for name, position in zip(JOINT_NAMES, positions)
     )
-    tf = (record.get("transforms") or {}).get("wrist_link")
+    transforms = record.get("transforms") or {}
+    tf_name = next((name for name, value in transforms.items() if value is not None), "")
+    tf = transforms.get(tf_name) if tf_name else None
     if tf:
         translation = tf["translation"]
         eef = (
-            f"wrist=({translation['x']:+.3f},"
+            f"{tf_name}=({translation['x']:+.3f},"
             f"{translation['y']:+.3f},{translation['z']:+.3f})"
         )
     else:
-        eef = "wrist=(no tf)"
+        eef = "eef=(no tf)"
     return f"#{index} comment='{comment}' {eef}\n  {joint_text}"
 
 
@@ -293,15 +324,15 @@ def main() -> int:
     )
     parser.add_argument(
         "--sequence",
-        default="7,6,5,6,7",
-        help="Comma-separated waypoint indices to replay. Default: 7,6,5,6,7.",
+        default="",
+        help="Comma-separated waypoint indices to replay. Default: all valid joint waypoints in file order.",
     )
     parser.add_argument(
         "--magnet-actions",
         default="",
         help=(
             "Optional comma-separated per-step magnet actions: on, off, none, "
-            "or comment. When omitted, actions are inferred from comments."
+            "or comment. When omitted, only !magnet on/off comments are commands."
         ),
     )
     parser.add_argument(
@@ -331,9 +362,9 @@ def main() -> int:
 
     try:
         sequence = parse_sequence(args.sequence)
-        magnet_actions = parse_magnet_actions(args.magnet_actions, len(sequence))
         records = load_records(waypoint_path)
-        waypoints = [(index, records[index], positions_from_record(records[index])) for index in sequence]
+        waypoints = select_waypoints(records, sequence)
+        magnet_actions = parse_magnet_actions(args.magnet_actions, len(waypoints))
     except KeyError as exc:
         print(f"waypoint index not found in {waypoint_path}: {exc}", file=sys.stderr)
         return 1
@@ -342,7 +373,7 @@ def main() -> int:
         return 1
 
     print(f"waypoint file: {waypoint_path}")
-    print(f"replay sequence: {', '.join(str(index) for index in sequence)}")
+    print(f"replay sequence: {', '.join(str(index) for index, _, _ in waypoints)}")
     if magnet_actions:
         action_text = [action if action != "comment" else "comment" for action in magnet_actions]
         print(f"magnet actions: {', '.join(action or 'none' for action in action_text)}")

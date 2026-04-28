@@ -12,23 +12,25 @@ export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
 export CYCLONEDDS_URI="${CYCLONEDDS_URI:-file://$REPO_ROOT/config/pi/simple_assembly_cyclonedds_pi.xml}"
 
-WAYPOINT_FILE="${WAYPOINT_FILE:-$REPO_ROOT/recorded_waypoints/canhat_waypoints.jsonl}"
-DEFAULT_WAYPOINT_SEQUENCE="7,6,5,6,7"
-WAYPOINT_SEQUENCE="${WAYPOINT_SEQUENCE:-$DEFAULT_WAYPOINT_SEQUENCE}"
+WAYPOINT_FILE="${WAYPOINT_FILE:-$REPO_ROOT/recorded_waypoints/canhat_joint_waypoints_latest.jsonl}"
+WAYPOINT_SEQUENCE="${WAYPOINT_SEQUENCE:-}"
 MOVE_DURATION="${MOVE_DURATION:-5.0}"
 GPIO_CHIP="${GPIO_CHIP:-gpiochip4}"
 GPIO_LINE="${GPIO_LINE:-17}"
 
+sequence_args=()
+if [[ -n "$WAYPOINT_SEQUENCE" ]]; then
+  sequence_args+=(--sequence "$WAYPOINT_SEQUENCE")
+fi
+
 magnet_args=()
 if [[ -n "${MAGNET_ACTIONS:-}" ]]; then
   magnet_args+=(--magnet-actions "$MAGNET_ACTIONS")
-elif [[ "$WAYPOINT_SEQUENCE" == "$DEFAULT_WAYPOINT_SEQUENCE" ]]; then
-  magnet_args+=(--magnet-actions "on,none,none,none,off")
 fi
 
 python3 "$REPO_ROOT/scripts/common/run_recorded_path.py" \
   --waypoint-file "$WAYPOINT_FILE" \
-  --sequence "$WAYPOINT_SEQUENCE" \
+  "${sequence_args[@]}" \
   "${magnet_args[@]}" \
   --duration "$MOVE_DURATION" \
   --gpio-chip "$GPIO_CHIP" \
