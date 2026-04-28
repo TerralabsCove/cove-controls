@@ -21,5 +21,10 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 start_moveit_warehouse simple_assembly_tracking_moveit_config
+warehouse_rviz_args=(
+  "moveit_warehouse_database_path:=$MOVEIT_WAREHOUSE_DATABASE_PATH_EFFECTIVE"
+)
 
-ros2 launch simple_assembly_tracking_moveit_config moveit_rviz_canhat.launch.py "$@"
+ros2 launch simple_assembly_tracking_moveit_config moveit_rviz_canhat.launch.py \
+  "${warehouse_rviz_args[@]}" \
+  "$@"
