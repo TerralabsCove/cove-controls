@@ -6,7 +6,7 @@ from launch_ros.parameter_descriptions import ParameterValue
 
 
 WAREHOUSE_PLUGIN = "warehouse_ros_sqlite::DatabaseConnection"
-WAREHOUSE_DB_FILENAME = "simple_assembly_warehouse.sqlite"
+WAREHOUSE_DB_FILENAME = "simple_assembly_tracking_warehouse.sqlite"
 
 
 def generate_launch_description():

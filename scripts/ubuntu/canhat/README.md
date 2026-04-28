@@ -29,6 +29,17 @@ Use these on the Ubuntu/RViz machine with the CAN HAT ros2_control variants:
 The old `scripts/ubuntu/simple` and `scripts/ubuntu/full` RViz scripts are left
 unchanged for the serial-compatible MoveIt configs.
 
+Stored States uses the MoveIt warehouse SQLite backend. If RViz still reports
+that it is not connected to a database, install the backend on the Ubuntu/RViz
+machine:
+
+```bash
+sudo apt install ros-jazzy-warehouse-ros-sqlite
+```
+
+The default database path is `~/.ros/simple_assembly_tracking_warehouse.sqlite`.
+Override it for CAN HAT scripts with `MOVEIT_WAREHOUSE_DATABASE_PATH=/path/file.sqlite`.
+
 ## Waypoint Recording
 
 If `/joint_states` and TF are visible on the Ubuntu/RViz machine, you can record
