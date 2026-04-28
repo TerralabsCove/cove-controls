@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+export QT_ACCESSIBILITY="${QT_ACCESSIBILITY:-1}"
+
 warehouse_pid=""
 MOVEIT_WAREHOUSE_DATABASE_PATH_EFFECTIVE=""
 

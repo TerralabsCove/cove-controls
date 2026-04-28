@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -23,6 +24,7 @@ struct MotorDesc
   damiao_socketcan::DM_Motor_Type type;
   uint32_t slave_id;
   uint32_t master_id;
+  double direction;
 };
 
 std::string trim(std::string value)
@@ -33,6 +35,15 @@ std::string trim(std::string value)
   }
   const auto last = value.find_last_not_of(" \t\n\r");
   return value.substr(first, last - first + 1);
+}
+
+double direction_from_string(const std::string & value)
+{
+  const double direction = std::stod(value);
+  if (std::abs(direction) < 1e-9) {
+    throw std::runtime_error("motor direction must be non-zero");
+  }
+  return direction < 0.0 ? -1.0 : 1.0;
 }
 
 }  // namespace
@@ -153,21 +164,25 @@ private:
         parts.push_back(trim(part));
       }
 
-      if (parts.size() != 4) {
+      if (parts.size() != 4 && parts.size() != 5) {
         throw std::runtime_error(
-          "Invalid motor spec '" + token + "'. Expected name:type:slave_id:master_id");
+          "Invalid motor spec '" + token +
+          "'. Expected name:type:slave_id:master_id[:direction]");
       }
 
       descs.push_back({
         parts[0],
         damiao_socketcan::motor_type_from_string(parts[1]),
         static_cast<uint32_t>(std::stoul(parts[2], nullptr, 0)),
-        static_cast<uint32_t>(std::stoul(parts[3], nullptr, 0))});
+        static_cast<uint32_t>(std::stoul(parts[3], nullptr, 0)),
+        parts.size() == 5 ? direction_from_string(parts[4]) : 1.0});
 
       motor_names_.push_back(parts[0]);
+      joint_directions_.push_back(descs.back().direction);
       RCLCPP_INFO(
-        get_logger(), "Configured motor '%s' %s slave=0x%02X master=0x%02X",
-        parts[0].c_str(), parts[1].c_str(), descs.back().slave_id, descs.back().master_id);
+        get_logger(), "Configured motor '%s' %s slave=0x%02X master=0x%02X direction=%+.0f",
+        parts[0].c_str(), parts[1].c_str(), descs.back().slave_id, descs.back().master_id,
+        descs.back().direction);
     }
 
     motors_.reserve(descs.size());
@@ -213,13 +228,18 @@ private:
         {
           mc_->refresh_motor_status(motors_[i]);
         } else if (control_mode_ == "velocity") {
-          mc_->control_vel(motors_[i], cmd_vel_[i]);
+          mc_->control_vel(motors_[i], static_cast<float>(joint_directions_[i] * cmd_vel_[i]));
         } else if (control_mode_ == "pos_vel" || control_mode_ == "position") {
-          mc_->control_pos_vel(motors_[i], cmd_pos_[i], cmd_vel_[i]);
+          mc_->control_pos_vel(
+            motors_[i],
+            static_cast<float>(joint_directions_[i] * cmd_pos_[i]),
+            std::abs(cmd_vel_[i]));
         } else if (control_mode_ == "mit") {
           mc_->control_mit(
-            motors_[i], cmd_mit_kp_[i], cmd_mit_kd_[i], cmd_mit_q_[i], cmd_mit_dq_[i],
-            cmd_mit_tau_[i]);
+            motors_[i], cmd_mit_kp_[i], cmd_mit_kd_[i],
+            static_cast<float>(joint_directions_[i] * cmd_mit_q_[i]),
+            static_cast<float>(joint_directions_[i] * cmd_mit_dq_[i]),
+            static_cast<float>(joint_directions_[i] * cmd_mit_tau_[i]));
         } else {
           mc_->refresh_motor_status(motors_[i]);
         }
@@ -237,9 +257,9 @@ private:
     msg.velocity.resize(motors_.size());
     msg.effort.resize(motors_.size());
     for (size_t i = 0; i < motors_.size(); ++i) {
-      msg.position[i] = motors_[i].Get_Position();
-      msg.velocity[i] = motors_[i].Get_Velocity();
-      msg.effort[i] = motors_[i].Get_tau();
+      msg.position[i] = joint_directions_[i] * motors_[i].Get_Position();
+      msg.velocity[i] = joint_directions_[i] * motors_[i].Get_Velocity();
+      msg.effort[i] = joint_directions_[i] * motors_[i].Get_tau();
     }
     joint_state_pub_->publish(msg);
   }
@@ -317,6 +337,7 @@ private:
   std::unique_ptr<damiao_socketcan::MotorControl> mc_;
   std::vector<damiao_socketcan::Motor> motors_;
   std::vector<std::string> motor_names_;
+  std::vector<double> joint_directions_;
 
   std::vector<float> cmd_vel_;
   std::vector<float> cmd_pos_;

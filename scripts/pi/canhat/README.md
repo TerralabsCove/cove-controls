@@ -62,6 +62,7 @@ The CAN HAT MoveIt config defaults to:
 - `capture_zero_on_activate=false`
 - `suppress_initial_writes=true`
 - full-arm IDs `0x01..0x07` with feedback IDs `0x11..0x17`
+- CAN HAT joint directions `[-1, 1, -1, 1, -1, 1, -1]`
 
 On startup, the CAN HAT hardware interface seeds command positions from live
 motor feedback and suppresses DM control writes until a non-hold command
@@ -89,10 +90,15 @@ enabling the motors, use the read-only wrapper instead:
 
 It starts the CAN HAT driver in `control_mode=status` with `auto_enable=false`,
 `switch_mode_on_start=false`, and `disable_on_shutdown=false`, then starts the
-CAN HAT robot_state_publisher so TF is available. It records the latest motor
+CAN HAT robot_state_publisher so TF is available. It uses the same joint
+direction signs as the ros2_control CAN HAT config. It records the latest motor
 joint positions plus `root -> camera_optical_frame` pose to a timestamped file
 like `recorded_waypoints/canhat_joint_waypoints_YYYYmmdd_HHMMSS.jsonl`, and
 updates `recorded_waypoints/canhat_joint_waypoints_latest.jsonl`.
+
+Waypoint files recorded before the CAN HAT direction signs were added use raw
+motor signs. Re-record those files before replaying them with the current CAN
+HAT ros2_control config.
 
 Each time you press Enter, the recorder appends a waypoint. Type text before
 pressing Enter to save that text as the waypoint comment. Type `q`, `quit`, or

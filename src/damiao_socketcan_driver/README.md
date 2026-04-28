@@ -18,6 +18,13 @@ The launch file defaults to:
 - `control_mode:=status`
 - `auto_enable:=false`
 
+The standalone `motors` spec also accepts an optional fifth field for logical
+joint direction:
+
+```bash
+motors:=revolute_1_0:DM4340:0x01:0x11:-1
+```
+
 Enable or disable the configured motors through services:
 
 ```bash
@@ -45,4 +52,9 @@ Joint parameters are the same as the existing driver:
 <param name="motor_type">DM10010</param>
 <param name="slave_id">0x01</param>
 <param name="master_id">0x11</param>
+<param name="direction">-1</param>
 ```
+
+`direction` is optional and defaults to `1`. A value of `-1` makes ROS joint
+position, velocity, effort, and commands use the opposite sign from the raw DM
+motor encoder.

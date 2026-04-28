@@ -11,6 +11,20 @@
 namespace damiao_socketcan_driver
 {
 
+namespace
+{
+
+double direction_from_param(const std::string & value)
+{
+  const double direction = std::stod(value);
+  if (std::abs(direction) < 1e-9) {
+    throw std::runtime_error("joint direction must be non-zero");
+  }
+  return direction < 0.0 ? -1.0 : 1.0;
+}
+
+}  // namespace
+
 hardware_interface::CallbackReturn DamiaoSocketCanHardwareInterface::on_init(
   const hardware_interface::HardwareInfo & info)
 {
@@ -57,6 +71,7 @@ hardware_interface::CallbackReturn DamiaoSocketCanHardwareInterface::on_init(
   hw_cmd_positions_.assign(n, 0.0);
   hw_cmd_velocities_.assign(n, 0.0);
   zero_offsets_.assign(n, 0.0);
+  joint_directions_.assign(n, 1.0);
   startup_cmd_positions_.assign(n, 0.0);
 
   for (size_t i = 0; i < n; ++i) {
@@ -66,13 +81,19 @@ hardware_interface::CallbackReturn DamiaoSocketCanHardwareInterface::on_init(
       std::stoul(joint.parameters.at("slave_id"), nullptr, 0));
     const auto master_id = static_cast<uint32_t>(
       std::stoul(joint.parameters.at("master_id"), nullptr, 0));
+    if (joint.parameters.count("direction")) {
+      joint_directions_[i] = direction_from_param(joint.parameters.at("direction"));
+    } else if (joint.parameters.count("position_sign")) {
+      joint_directions_[i] = direction_from_param(joint.parameters.at("position_sign"));
+    }
     const auto motor_type = damiao_socketcan::motor_type_from_string(motor_type_str);
     motors_.emplace_back(motor_type, slave_id, master_id);
 
     RCLCPP_INFO(
       rclcpp::get_logger("DamiaoSocketCanHardwareInterface"),
-      "Joint '%s': %s slave=0x%02X master=0x%02X on %s",
-      joint.name.c_str(), motor_type_str.c_str(), slave_id, master_id, can_interface_.c_str());
+      "Joint '%s': %s slave=0x%02X master=0x%02X direction=%+.0f on %s",
+      joint.name.c_str(), motor_type_str.c_str(), slave_id, master_id, joint_directions_[i],
+      can_interface_.c_str());
   }
 
   for (auto & motor : motors_) {
@@ -180,9 +201,10 @@ hardware_interface::CallbackReturn DamiaoSocketCanHardwareInterface::on_activate
     }
 
     for (size_t i = 0; i < motors_.size(); ++i) {
-      hw_positions_[i] = static_cast<double>(motors_[i].Get_Position()) - zero_offsets_[i];
-      hw_velocities_[i] = static_cast<double>(motors_[i].Get_Velocity());
-      hw_efforts_[i] = static_cast<double>(motors_[i].Get_tau());
+      hw_positions_[i] =
+        joint_directions_[i] * (static_cast<double>(motors_[i].Get_Position()) - zero_offsets_[i]);
+      hw_velocities_[i] = joint_directions_[i] * static_cast<double>(motors_[i].Get_Velocity());
+      hw_efforts_[i] = joint_directions_[i] * static_cast<double>(motors_[i].Get_tau());
       hw_cmd_positions_[i] = hw_positions_[i];
       hw_cmd_velocities_[i] = 0.0;
       startup_cmd_positions_[i] = hw_positions_[i];
@@ -231,9 +253,10 @@ hardware_interface::return_type DamiaoSocketCanHardwareInterface::read(
 
   for (size_t i = 0; i < motors_.size(); ++i) {
     mc_->refresh_motor_status(motors_[i]);
-    hw_positions_[i] = static_cast<double>(motors_[i].Get_Position()) - zero_offsets_[i];
-    hw_velocities_[i] = static_cast<double>(motors_[i].Get_Velocity());
-    hw_efforts_[i] = static_cast<double>(motors_[i].Get_tau());
+    hw_positions_[i] =
+      joint_directions_[i] * (static_cast<double>(motors_[i].Get_Position()) - zero_offsets_[i]);
+    hw_velocities_[i] = joint_directions_[i] * static_cast<double>(motors_[i].Get_Velocity());
+    hw_efforts_[i] = joint_directions_[i] * static_cast<double>(motors_[i].Get_tau());
     if (suppress_initial_writes_ && !writes_enabled_) {
       hw_cmd_positions_[i] = hw_positions_[i];
       hw_cmd_velocities_[i] = 0.0;
@@ -267,13 +290,16 @@ hardware_interface::return_type DamiaoSocketCanHardwareInterface::write(
 
   for (size_t i = 0; i < motors_.size(); ++i) {
     if (control_mode_ == "velocity") {
-      mc_->control_vel(motors_[i], static_cast<float>(hw_cmd_velocities_[i]));
+      mc_->control_vel(
+        motors_[i], static_cast<float>(joint_directions_[i] * hw_cmd_velocities_[i]));
     } else {
       float cmd_vel = static_cast<float>(hw_cmd_velocities_[i]);
       if (std::abs(cmd_vel) < 0.01f) {
         cmd_vel = 5.0f;
       }
-      const float motor_cmd = static_cast<float>(hw_cmd_positions_[i] + zero_offsets_[i]);
+      cmd_vel = std::abs(cmd_vel);
+      const float motor_cmd =
+        static_cast<float>(joint_directions_[i] * hw_cmd_positions_[i] + zero_offsets_[i]);
       mc_->control_pos_vel(motors_[i], motor_cmd, cmd_vel);
     }
   }

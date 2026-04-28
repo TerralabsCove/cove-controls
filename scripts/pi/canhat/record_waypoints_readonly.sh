@@ -14,7 +14,7 @@ export CYCLONEDDS_URI="${CYCLONEDDS_URI:-file://$REPO_ROOT/config/pi/simple_asse
 
 CAN_INTERFACE="${CAN_INTERFACE:-can1}"
 LOOP_RATE="${LOOP_RATE:-50.0}"
-MOTOR_SPEC="${MOTOR_SPEC:-revolute_1_0:DM4340:0x01:0x11,revolute_2_0:DM10010:0x02:0x12,revolute_3_0:DM4340:0x03:0x13,revolute_4_0:DM10010:0x04:0x14,revolute_5_0:DM4340:0x05:0x15,revolute_6_0:DM10010:0x06:0x16,revolute_7_0:DM4340:0x07:0x17}"
+MOTOR_SPEC="${MOTOR_SPEC:-revolute_1_0:DM4340:0x01:0x11:-1,revolute_2_0:DM10010:0x02:0x12:1,revolute_3_0:DM4340:0x03:0x13:-1,revolute_4_0:DM10010:0x04:0x14:1,revolute_5_0:DM4340:0x05:0x15:-1,revolute_6_0:DM10010:0x06:0x16:1,revolute_7_0:DM4340:0x07:0x17:-1}"
 EEF_FRAME="${EEF_FRAME:-camera_optical_frame}"
 STAMP="$(date +%Y%m%d_%H%M%S)"
 OUTPUT="${OUTPUT:-$REPO_ROOT/recorded_waypoints/canhat_joint_waypoints_${STAMP}.jsonl}"

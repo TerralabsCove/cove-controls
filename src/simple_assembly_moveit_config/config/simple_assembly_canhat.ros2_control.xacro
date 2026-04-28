@@ -1,5 +1,13 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+    <xacro:arg name="j1_direction" default="-1"/>
+    <xacro:arg name="j2_direction" default="1"/>
+    <xacro:arg name="j3_direction" default="-1"/>
+    <xacro:arg name="j4_direction" default="1"/>
+    <xacro:arg name="j5_direction" default="-1"/>
+    <xacro:arg name="j6_direction" default="1"/>
+    <xacro:arg name="j7_direction" default="-1"/>
+
     <xacro:macro name="simple_assembly_canhat_ros2_control" params="name">
 
         <ros2_control name="${name}" type="system">
@@ -17,6 +25,7 @@
                 <param name="motor_type">DM4340</param>
                 <param name="slave_id">0x01</param>
                 <param name="master_id">0x11</param>
+                <param name="direction">$(arg j1_direction)</param>
                 <command_interface name="position"/>
                 <command_interface name="velocity"/>
                 <state_interface name="position"/>
@@ -29,6 +38,7 @@
                 <param name="motor_type">DM10010</param>
                 <param name="slave_id">0x02</param>
                 <param name="master_id">0x12</param>
+                <param name="direction">$(arg j2_direction)</param>
                 <command_interface name="position"/>
                 <command_interface name="velocity"/>
                 <state_interface name="position"/>
@@ -41,6 +51,7 @@
                 <param name="motor_type">DM4340</param>
                 <param name="slave_id">0x03</param>
                 <param name="master_id">0x13</param>
+                <param name="direction">$(arg j3_direction)</param>
                 <command_interface name="position"/>
                 <command_interface name="velocity"/>
                 <state_interface name="position"/>
@@ -53,6 +64,7 @@
                 <param name="motor_type">DM10010</param>
                 <param name="slave_id">0x04</param>
                 <param name="master_id">0x14</param>
+                <param name="direction">$(arg j4_direction)</param>
                 <command_interface name="position"/>
                 <command_interface name="velocity"/>
                 <state_interface name="position"/>
@@ -65,6 +77,7 @@
                 <param name="motor_type">DM4340</param>
                 <param name="slave_id">0x05</param>
                 <param name="master_id">0x15</param>
+                <param name="direction">$(arg j5_direction)</param>
                 <command_interface name="position"/>
                 <command_interface name="velocity"/>
                 <state_interface name="position"/>
@@ -77,6 +90,7 @@
                 <param name="motor_type">DM10010</param>
                 <param name="slave_id">0x06</param>
                 <param name="master_id">0x16</param>
+                <param name="direction">$(arg j6_direction)</param>
                 <command_interface name="position"/>
                 <command_interface name="velocity"/>
                 <state_interface name="position"/>
@@ -89,6 +103,7 @@
                 <param name="motor_type">DM4340</param>
                 <param name="slave_id">0x07</param>
                 <param name="master_id">0x17</param>
+                <param name="direction">$(arg j7_direction)</param>
                 <command_interface name="position"/>
                 <command_interface name="velocity"/>
                 <state_interface name="position"/>

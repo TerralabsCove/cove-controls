@@ -56,6 +56,7 @@ private:
   std::vector<double> hw_cmd_positions_;
   std::vector<double> hw_cmd_velocities_;
   std::vector<double> zero_offsets_;
+  std::vector<double> joint_directions_;
   std::vector<double> startup_cmd_positions_;
 
   std::thread init_thread_;

@@ -16,8 +16,8 @@ source "$REPO_ROOT/scripts/ubuntu/canhat/warehouse_db_common.sh"
 
 cleanup() {
   stop_moveit_warehouse
-  kill "${rviz_pid:-}" "${image_pid:-}" 2>/dev/null || true
-  wait "${rviz_pid:-}" "${image_pid:-}" 2>/dev/null || true
+  kill "${rviz_pid:-}" "${image_pid:-}" "${warehouse_connect_pid:-}" 2>/dev/null || true
+  wait "${rviz_pid:-}" "${image_pid:-}" "${warehouse_connect_pid:-}" 2>/dev/null || true
 }
 
 trap cleanup EXIT INT TERM
@@ -32,6 +32,9 @@ ros2 launch simple_assembly_tracking_moveit_config moveit_rviz_canhat.launch.py 
   "${warehouse_rviz_args[@]}" \
   "$@" &
 rviz_pid=$!
+
+"$REPO_ROOT/scripts/ubuntu/canhat/auto_connect_moveit_warehouse.py" --timeout 90 &
+warehouse_connect_pid=$!
 
 sleep 2
 if ! kill -0 "$rviz_pid" 2>/dev/null; then
