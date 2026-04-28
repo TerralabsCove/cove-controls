@@ -8,6 +8,7 @@ def generate_launch_description():
             "simple_assembly", package_name="simple_assembly_moveit_config"
         )
         .robot_description(file_path="config/simple_assembly_canhat.urdf.xacro")
+        .joint_limits(file_path="config/joint_limits_canhat.yaml")
         .to_moveit_configs()
     )
     return generate_demo_launch(moveit_config)

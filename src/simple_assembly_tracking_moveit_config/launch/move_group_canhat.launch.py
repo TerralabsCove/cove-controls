@@ -10,6 +10,7 @@ def generate_launch_description():
         )
         .robot_description(file_path="config/simple_assembly_tracking_canhat.urdf.xacro")
         .robot_description_semantic(file_path="config/simple_assembly_tracking.srdf")
+        .joint_limits(file_path="config/joint_limits_canhat.yaml")
         .to_moveit_configs()
     )
     return generate_move_group_launch(moveit_config)
