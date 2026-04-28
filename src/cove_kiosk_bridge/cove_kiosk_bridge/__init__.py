@@ -1,0 +1,1 @@
+"""COVE kiosk bridge package."""
