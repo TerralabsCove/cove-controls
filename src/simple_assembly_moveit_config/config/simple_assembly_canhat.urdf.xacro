@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="simple_assembly">
+
+    <!-- Import simple_assembly urdf file -->
+    <xacro:include filename="$(find simple_assembly)/urdf/simple_assembly.urdf" />
+
+    <!-- CAN HAT ros2_control wiring. The original serial wiring is kept in simple_assembly.urdf.xacro. -->
+    <xacro:include filename="simple_assembly_canhat.ros2_control.xacro" />
+
+    <xacro:simple_assembly_canhat_ros2_control name="DamiaoArm"/>
+
+</robot>

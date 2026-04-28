@@ -1,0 +1,9 @@
+<library path="damiao_socketcan_hardware_interface">
+  <class name="damiao_socketcan_driver/DamiaoSocketCanHardwareInterface"
+         type="damiao_socketcan_driver::DamiaoSocketCanHardwareInterface"
+         base_class_type="hardware_interface::SystemInterface">
+    <description>
+      ros2_control hardware interface for Damiao/DM motors over SocketCAN.
+    </description>
+  </class>
+</library>

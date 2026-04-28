@@ -28,9 +28,10 @@ fi
 echo "Driving ${CHIP} line ${PIN} LOW (magnet OFF) for 1s…"
 gpioset "${CHIP}" "${PIN}=0"
 sleep 1
+#gpioset "${CHIP}" "${PIN}=1"
 
-echo "Driving ${CHIP} line ${PIN} HIGH (magnet ON)…"
-echo "Press Ctrl+C to release."
+#echo "Driving ${CHIP} line ${PIN} HIGH (magnet ON)…"
+#echo "Press Ctrl+C to release."
 
 # --mode=signal holds the line until the process is killed.
-exec gpioset --mode=signal "${CHIP}" "${PIN}=1"
+#exec gpioset --mode=signal "${CHIP}" "${PIN}=1"
