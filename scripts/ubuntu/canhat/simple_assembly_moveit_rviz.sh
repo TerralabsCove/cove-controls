@@ -10,6 +10,6 @@ set -u
 
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
-export CYCLONEDDS_URI="${CYCLONEDDS_URI:-file://$REPO_ROOT/config/ubuntu/simple_assembly_cyclonedds_ubuntu.xml}"
+export CYCLONEDDS_URI="file://$REPO_ROOT/config/ubuntu/simple_assembly_cyclonedds_ubuntu.xml"
 
 ros2 launch simple_assembly_moveit_config moveit_rviz_canhat.launch.py "$@"
