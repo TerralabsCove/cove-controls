@@ -15,7 +15,8 @@ export CYCLONEDDS_URI="file://$REPO_ROOT/config/ubuntu/simple_assembly_cyclonedd
 FIXED_FRAME="${1:-root}"
 EEF_FRAME="${2:-camera_optical_frame}"
 
-echo "Streaming $EEF_FRAME position in $FIXED_FRAME  (Ctrl+C to stop)"
+echo "Streaming $EEF_FRAME pose in $FIXED_FRAME  (Ctrl+C to stop)"
 echo ""
 
-ros2 run tf2_ros tf2_echo "$FIXED_FRAME" "$EEF_FRAME" 2>/dev/null | grep --line-buffered "Translation"
+ros2 run tf2_ros tf2_echo "$FIXED_FRAME" "$EEF_FRAME" 2>/dev/null \
+  | grep --line-buffered -E "Translation|Rotation"
