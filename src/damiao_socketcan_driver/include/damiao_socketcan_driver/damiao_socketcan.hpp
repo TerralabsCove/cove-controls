@@ -3,6 +3,7 @@
 
 #include <array>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -199,6 +200,7 @@ public:
   void control_pos_force(Motor & motor, float pos, uint16_t vel, uint16_t current);
 
   bool receive(std::chrono::milliseconds timeout = std::chrono::milliseconds(2));
+  void receive_available(size_t max_frames = 16);
   void receive_for(std::chrono::milliseconds duration);
 
   float read_motor_param(Motor & motor, uint8_t rid);

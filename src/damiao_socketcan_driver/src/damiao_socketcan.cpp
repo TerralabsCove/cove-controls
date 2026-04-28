@@ -233,7 +233,7 @@ void MotorControl::enable(const Motor & motor)
 {
   control_cmd(motor.GetSlaveId(), 0xFC);
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
-  receive_for(std::chrono::milliseconds(10));
+  receive_available();
 }
 
 void MotorControl::enable_old(const Motor & motor, Control_Mode mode)
@@ -241,21 +241,21 @@ void MotorControl::enable_old(const Motor & motor, Control_Mode mode)
   const MotorId id = ((mode - 1) << 2) + motor.GetSlaveId();
   control_cmd(id, 0xFC);
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
-  receive_for(std::chrono::milliseconds(10));
+  receive_available();
 }
 
 void MotorControl::disable(const Motor & motor)
 {
   control_cmd(motor.GetSlaveId(), 0xFD);
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
-  receive_for(std::chrono::milliseconds(10));
+  receive_available();
 }
 
 void MotorControl::set_zero_position(const Motor & motor)
 {
   control_cmd(motor.GetSlaveId(), 0xFE);
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
-  receive_for(std::chrono::milliseconds(10));
+  receive_available();
 }
 
 void MotorControl::refresh_motor_status(const Motor & motor)
@@ -265,7 +265,7 @@ void MotorControl::refresh_motor_status(const Motor & motor)
     static_cast<uint8_t>((motor.GetSlaveId() >> 8) & 0xFF),
     0xCC, 0x00, 0x00, 0x00, 0x00, 0x00};
   send_frame(0x7FF, data);
-  receive_for(std::chrono::milliseconds(3));
+  receive_available();
 }
 
 void MotorControl::control_mit(Motor & motor, float kp, float kd, float q, float dq, float tau)
@@ -293,7 +293,7 @@ void MotorControl::control_mit(Motor & motor, float kp, float kd, float q, float
   data[7] = tau_uint & 0xFF;
 
   send_frame(id, data);
-  receive_for(std::chrono::milliseconds(2));
+  receive_available();
 }
 
 void MotorControl::control_pos_vel(Motor & motor, float pos, float vel)
@@ -307,7 +307,7 @@ void MotorControl::control_pos_vel(Motor & motor, float pos, float vel)
   std::memcpy(data.data(), &pos, sizeof(float));
   std::memcpy(data.data() + 4, &vel, sizeof(float));
   send_frame(id + POS_MODE, data);
-  receive_for(std::chrono::milliseconds(2));
+  receive_available();
 }
 
 void MotorControl::control_vel(Motor & motor, float vel)
@@ -320,7 +320,7 @@ void MotorControl::control_vel(Motor & motor, float vel)
   std::array<uint8_t, 8> data{};
   std::memcpy(data.data(), &vel, sizeof(float));
   send_frame(id + SPEED_MODE, data);
-  receive_for(std::chrono::milliseconds(2));
+  receive_available();
 }
 
 void MotorControl::control_pos_force(Motor & motor, float pos, uint16_t vel, uint16_t current)
@@ -335,7 +335,7 @@ void MotorControl::control_pos_force(Motor & motor, float pos, uint16_t vel, uin
   std::memcpy(data.data() + 4, &vel, sizeof(uint16_t));
   std::memcpy(data.data() + 6, &current, sizeof(uint16_t));
   send_frame(id + POSI_MODE, data);
-  receive_for(std::chrono::milliseconds(2));
+  receive_available();
 }
 
 bool MotorControl::receive(std::chrono::milliseconds timeout)
@@ -348,6 +348,15 @@ bool MotorControl::receive(std::chrono::milliseconds timeout)
     return true;
   }
   return decode_feedback(*frame);
+}
+
+void MotorControl::receive_available(size_t max_frames)
+{
+  for (size_t i = 0; i < max_frames; ++i) {
+    if (!receive(std::chrono::milliseconds(0))) {
+      return;
+    }
+  }
 }
 
 void MotorControl::receive_for(std::chrono::milliseconds duration)

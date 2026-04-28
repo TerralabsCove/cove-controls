@@ -112,7 +112,7 @@ hardware_interface::CallbackReturn DamiaoSocketCanHardwareInterface::on_activate
         info_.joints[i].name.c_str(), motors_[i].GetSlaveId());
       mc_->disable(motors_[i]);
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    std::this_thread::sleep_for(std::chrono::seconds(1));
 
     if (switch_mode_on_activate_) {
       for (size_t i = 0; i < motors_.size(); ++i) {

@@ -40,7 +40,7 @@ public:
 private:
   std::string can_interface_ = "can1";
   std::string control_mode_ = "pos_vel";
-  bool switch_mode_on_activate_ = false;
+  bool switch_mode_on_activate_ = true;
 
   damiao_socketcan::SocketCan::SharedPtr can_;
   std::unique_ptr<damiao_socketcan::MotorControl> mc_;
