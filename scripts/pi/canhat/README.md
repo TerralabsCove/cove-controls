@@ -139,6 +139,27 @@ Override the file, sequence, or speed inline:
 WAYPOINT_FILE=recorded_waypoints/canhat_waypoints.jsonl WAYPOINT_SEQUENCE=7,6,5,6,7 MOVE_DURATION=6.0 ./scripts/pi/canhat/run_recorded_path.sh
 ```
 
+## Stored State Replay
+
+RViz Stored States can be replayed directly on the Pi after the CAN HAT
+ros2_control robot is running:
+
+```bash
+./scripts/pi/canhat/tracking_moveit.sh
+./scripts/pi/canhat/run_stored_states.sh
+```
+
+The script reads `~/.ros/simple_assembly_tracking_warehouse.sqlite` by default.
+Edit `STORED_STATE_SEQUENCE` near the top of `run_stored_states.sh` to choose
+Stored State names or row IDs. It pauses before each step and only publishes
+the joint target after you press Enter.
+
+To refresh the local database from the Ubuntu/RViz machine:
+
+```bash
+SYNC_WAREHOUSE_DB=1 ./scripts/pi/canhat/run_stored_states.sh
+```
+
 ## End-Effector Path Replay
 
 For pose-only JSONL files captured with `record_waypoints_readonly.sh`, use:
