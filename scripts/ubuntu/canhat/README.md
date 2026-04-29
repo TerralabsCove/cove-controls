@@ -65,3 +65,7 @@ robot launch is running on the Pi:
 Edit `STORED_STATE_SEQUENCE` near the top of that script to choose the Stored
 State names or row IDs. The script pauses before each step and only publishes
 the joint target after you press Enter.
+
+Sequence entries can also include `magnet_on`, `magnet_off`, and quoted manual
+duration states like `"lift_drink(manual)"`. Set `SKIP_CONFIRMATION=1` to run
+without the per-step approval prompts.

@@ -154,6 +154,21 @@ Edit `STORED_STATE_SEQUENCE` near the top of `run_stored_states.sh` to choose
 Stored State names or row IDs. It pauses before each step and only publishes
 the joint target after you press Enter.
 
+Sequence entries can also include `magnet_on`, `magnet_off`, and manual
+duration states:
+
+```bash
+STORED_STATE_SEQUENCE=(home magnet_on "lift_drink(manual)" to_cup magnet_off)
+```
+
+For a manual entry, the runner asks for a duration in seconds, sends that state
+with that duration, sleeps exactly that long, then advances to the next sequence
+entry. To skip the per-step approval prompts:
+
+```bash
+SKIP_CONFIRMATION=1 ./scripts/pi/canhat/run_stored_states.sh
+```
+
 To refresh the local database from the Ubuntu/RViz machine:
 
 ```bash

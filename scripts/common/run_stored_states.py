@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import sqlite3
+import subprocess
 import sys
 import threading
 import time
@@ -47,6 +48,66 @@ class StoredState:
         self.robot_id = robot_id
         self.creation_time = creation_time
         self.positions = positions
+
+
+class SequenceStep:
+    def __init__(
+        self,
+        token: str,
+        kind: str,
+        state: StoredState | None = None,
+        magnet_action: str | None = None,
+        manual: bool = False,
+    ) -> None:
+        self.token = token
+        self.kind = kind
+        self.state = state
+        self.magnet_action = magnet_action
+        self.manual = manual
+
+
+class MagnetController:
+    def __init__(self, gpio_chip: str, gpio_line: int, dry_run: bool) -> None:
+        self.gpio_chip = gpio_chip
+        self.gpio_line = gpio_line
+        self.dry_run = dry_run
+        self.proc: subprocess.Popen | None = None
+
+    def on(self) -> None:
+        if self.dry_run:
+            print("dry-run: magnet ON")
+            return
+        if self.proc is not None:
+            print("magnet already ON")
+            return
+        self._drive_low()
+        self.proc = subprocess.Popen(
+            ["gpioset", "--mode=signal", self.gpio_chip, f"{self.gpio_line}=1"]
+        )
+        print("magnet ON")
+
+    def off(self) -> None:
+        if self.dry_run:
+            print("dry-run: magnet OFF")
+            return
+        if self.proc is not None:
+            self.proc.terminate()
+            try:
+                self.proc.wait(timeout=2.0)
+            except subprocess.TimeoutExpired:
+                self.proc.kill()
+                self.proc.wait(timeout=1.0)
+            self.proc = None
+        self._drive_low()
+        print("magnet OFF")
+
+    def _drive_low(self) -> None:
+        subprocess.run(
+            ["gpioset", self.gpio_chip, f"{self.gpio_line}=0"],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
 
 
 class StoredStateRunner(Node):
@@ -172,27 +233,82 @@ def parse_sequence(value: str) -> list[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
-def select_sequence(states: list[StoredState], sequence: list[str]) -> list[StoredState]:
+def parse_magnet_action(token: str) -> str | None:
+    text = token.strip().lower()
+    if text.startswith("!"):
+        text = text[1:].strip()
+    compact = text.replace(" ", "").replace("-", "_").replace(":", "_")
+
+    if compact in {"magnet_on", "magneton", "magnet(on)", "magnet=on"}:
+        return "on"
+    if compact in {"magnet_off", "magnetoff", "magnet(off)", "magnet=off"}:
+        return "off"
+    return None
+
+
+def parse_state_token(token: str) -> tuple[str, bool]:
+    text = token.strip()
+    manual = False
+    if text.endswith(")") and "(" in text:
+        name, suffix = text.rsplit("(", 1)
+        mode = suffix[:-1].strip().lower()
+        if mode != "manual":
+            raise ValueError(f"unsupported mode in sequence token '{token}': {mode}")
+        text = name.strip()
+        manual = True
+    if not text:
+        raise ValueError(f"empty stored state name in sequence token '{token}'")
+    return text, manual
+
+
+def build_state_indexes(
+    states: list[StoredState],
+) -> tuple[dict[str, list[StoredState]], dict[str, StoredState]]:
     by_name: dict[str, list[StoredState]] = {}
     by_id: dict[str, StoredState] = {}
     for state in states:
         by_name.setdefault(state.name, []).append(state)
         by_id[str(state.row_id)] = state
+    return by_name, by_id
 
-    selected: list[StoredState] = []
+
+def resolve_state(
+    token: str,
+    by_name: dict[str, list[StoredState]],
+    by_id: dict[str, StoredState],
+) -> StoredState:
+    if token in by_id:
+        return by_id[token]
+    matches = by_name.get(token, [])
+    if not matches:
+        raise ValueError(f"stored state not found: {token}")
+    if len(matches) > 1:
+        ids = ", ".join(str(match.row_id) for match in matches)
+        raise ValueError(
+            f"stored state name '{token}' is ambiguous; use one of row IDs: {ids}"
+        )
+    return matches[0]
+
+
+def select_sequence(states: list[StoredState], sequence: list[str]) -> list[SequenceStep]:
+    by_name, by_id = build_state_indexes(states)
+    selected: list[SequenceStep] = []
     for token in sequence:
-        if token in by_id:
-            selected.append(by_id[token])
-            continue
-        matches = by_name.get(token, [])
-        if not matches:
-            raise ValueError(f"stored state not found: {token}")
-        if len(matches) > 1:
-            ids = ", ".join(str(match.row_id) for match in matches)
-            raise ValueError(
-                f"stored state name '{token}' is ambiguous; use one of row IDs: {ids}"
+        magnet_action = parse_magnet_action(token)
+        if magnet_action is not None:
+            selected.append(
+                SequenceStep(token=token, kind="magnet", magnet_action=magnet_action)
             )
-        selected.append(matches[0])
+            continue
+        state_token, manual = parse_state_token(token)
+        selected.append(
+            SequenceStep(
+                token=token,
+                kind="state",
+                state=resolve_state(state_token, by_name, by_id),
+                manual=manual,
+            )
+        )
     return selected
 
 
@@ -205,6 +321,15 @@ def state_summary(state: StoredState) -> str:
         f"stored state '{state.name}' row_id={state.row_id} robot='{state.robot_id}'\n"
         f"  {joint_text}"
     )
+
+
+def sequence_step_label(step: SequenceStep) -> str:
+    if step.kind == "magnet":
+        return f"magnet_{step.magnet_action}"
+    if step.state is None:
+        return step.token
+    suffix = "(manual)" if step.manual else ""
+    return f"{step.state.name}{suffix}"
 
 
 def print_available_states(states: list[StoredState]) -> None:
@@ -253,11 +378,42 @@ def wait_for_motion_review(
         print(f"warning: max joint error still {max(errors):.4f} rad")
 
 
-def prompt_for_step(step: int, total: int, state: StoredState) -> str:
+def magnet_summary(action: str) -> str:
+    return f"magnet command: {action.upper()}"
+
+
+def prompt_for_step(step: int, total: int, item: SequenceStep) -> str:
     print()
     print(f"step {step}/{total}")
-    print(state_summary(state))
+    if item.kind == "magnet":
+        print(magnet_summary(item.magnet_action or ""))
+        return input("Press Enter to run this command, s to skip, q to quit: ").strip().lower()
+    if item.state is None:
+        raise RuntimeError(f"invalid state sequence item: {item.token}")
+    print(state_summary(item.state))
+    if item.manual:
+        print("mode: manual duration")
     return input("Press Enter to run this stored state, s to skip, q to quit: ").strip().lower()
+
+
+def prompt_for_manual_duration(state: StoredState, default_duration: float) -> float | None:
+    while True:
+        reply = input(
+            f"Duration for '{state.name}' in seconds [{default_duration:.2f}], q to quit: "
+        ).strip().lower()
+        if not reply:
+            return default_duration
+        if reply in {"q", "quit", "exit"}:
+            return None
+        try:
+            duration = float(reply)
+        except ValueError:
+            print("Enter a positive number of seconds, or q to quit.")
+            continue
+        if duration <= 0.0:
+            print("Duration must be greater than zero.")
+            continue
+        return duration
 
 
 def main() -> int:
@@ -286,6 +442,21 @@ def main() -> int:
     parser.add_argument("--goal-tolerance", type=float, default=0.05)
     parser.add_argument("--settle-timeout", type=float, default=8.0)
     parser.add_argument("--startup-wait", type=float, default=10.0)
+    parser.add_argument(
+        "--skip-confirmation",
+        "--skip-confirm",
+        "--no-confirm",
+        "--yes",
+        action="store_true",
+        help="Run sequence entries without the per-step Enter approval prompt.",
+    )
+    parser.add_argument("--gpio-chip", default="gpiochip4")
+    parser.add_argument("--gpio-line", type=int, default=17)
+    parser.add_argument(
+        "--keep-magnet-on-exit",
+        action="store_true",
+        help="Do not force the magnet low when the script exits.",
+    )
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
@@ -315,13 +486,16 @@ def main() -> int:
         return 1
 
     print(f"warehouse database: {database_path}")
-    print("replay sequence: " + ", ".join(state.name for state in selected))
+    print("replay sequence: " + ", ".join(sequence_step_label(item) for item in selected))
     print(f"duration per state: {args.duration:.2f}s")
+    if args.skip_confirmation:
+        print("confirmation prompts: skipped")
 
     rclpy.init()
     node = StoredStateRunner(args.trajectory_topic, args.joint_topic)
     spin_thread = threading.Thread(target=rclpy.spin, args=(node,), daemon=True)
     spin_thread.start()
+    magnet = MagnetController(args.gpio_chip, args.gpio_line, args.dry_run)
 
     try:
         if not args.dry_run:
@@ -338,28 +512,61 @@ def main() -> int:
                     file=sys.stderr,
                 )
 
-        for step, state in enumerate(selected, start=1):
-            reply = prompt_for_step(step, len(selected), state)
-            if reply in {"q", "quit", "exit"}:
-                print("stopping stored-state replay")
-                return 0
-            if reply in {"s", "skip"}:
-                print(f"skipped stored state '{state.name}'")
+        for step, item in enumerate(selected, start=1):
+            if args.skip_confirmation:
+                print()
+                print(f"step {step}/{len(selected)}")
+                if item.kind == "magnet":
+                    print(magnet_summary(item.magnet_action or ""))
+                elif item.state is not None:
+                    print(state_summary(item.state))
+                    if item.manual:
+                        print("mode: manual duration")
+            else:
+                reply = prompt_for_step(step, len(selected), item)
+                if reply in {"q", "quit", "exit"}:
+                    print("stopping stored-state replay")
+                    return 0
+                if reply in {"s", "skip"}:
+                    print(f"skipped sequence item '{item.token}'")
+                    continue
+
+            if item.kind == "magnet":
+                if item.magnet_action == "on":
+                    magnet.on()
+                elif item.magnet_action == "off":
+                    magnet.off()
                 continue
 
+            if item.state is None:
+                print(f"invalid sequence item: {item.token}", file=sys.stderr)
+                return 1
+
+            duration = args.duration
+            if item.manual:
+                manual_duration = prompt_for_manual_duration(item.state, args.duration)
+                if manual_duration is None:
+                    print("stopping stored-state replay")
+                    return 0
+                duration = manual_duration
+
             if args.dry_run:
-                print(f"dry-run: would publish stored state '{state.name}'")
+                print(f"dry-run: would publish stored state '{item.state.name}' for {duration:.2f}s")
             else:
-                target = dict(zip(JOINT_NAMES, state.positions))
-                node.publish_state(state.positions, args.duration)
-                print(f"sent stored state '{state.name}'")
-                wait_for_motion_review(
-                    node,
-                    target,
-                    duration_s=args.duration,
-                    tolerance=args.goal_tolerance,
-                    timeout_s=args.settle_timeout,
-                )
+                target = dict(zip(JOINT_NAMES, item.state.positions))
+                node.publish_state(item.state.positions, duration)
+                print(f"sent stored state '{item.state.name}' for {duration:.2f}s")
+                if item.manual:
+                    time.sleep(max(0.0, duration))
+                    print("manual duration elapsed; advancing to next sequence item")
+                else:
+                    wait_for_motion_review(
+                        node,
+                        target,
+                        duration_s=duration,
+                        tolerance=args.goal_tolerance,
+                        timeout_s=args.settle_timeout,
+                    )
 
         print("stored-state replay complete")
         return 0
@@ -367,6 +574,8 @@ def main() -> int:
         print("\nstopping stored-state replay")
         return 130
     finally:
+        if not args.keep_magnet_on_exit:
+            magnet.off()
         node.destroy_node()
         rclpy.shutdown()
         spin_thread.join(timeout=1.0)

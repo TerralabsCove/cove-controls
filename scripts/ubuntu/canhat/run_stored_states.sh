@@ -12,15 +12,19 @@ export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-0}"
 export CYCLONEDDS_URI="${CYCLONEDDS_URI:-file://$REPO_ROOT/config/ubuntu/simple_assembly_cyclonedds_ubuntu.xml}"
 
-# Edit this sequence. Entries can be Stored State names or SQLite row IDs.
+# Edit this sequence. Entries can be Stored State names, SQLite row IDs,
+# magnet_on, magnet_off, or quoted manual-duration states like "lift_drink(manual)".
 # Example:
-# STORED_STATE_SEQUENCE=(home grabbing_bottle lift_drink to_cup pour1)
+# STORED_STATE_SEQUENCE=(home magnet_on grabbing_bottle "lift_drink(manual)" to_cup magnet_off)
 STORED_STATE_SEQUENCE=(
 )
 
 WAREHOUSE_DB="${WAREHOUSE_DB:-${MOVEIT_WAREHOUSE_DATABASE_PATH:-$HOME/.ros/simple_assembly_tracking_warehouse.sqlite}}"
 MOVE_DURATION="${MOVE_DURATION:-5.0}"
 ROBOT_ID="${ROBOT_ID:-simple_assembly_tracking}"
+SKIP_CONFIRMATION="${SKIP_CONFIRMATION:-0}"
+GPIO_CHIP="${GPIO_CHIP:-gpiochip4}"
+GPIO_LINE="${GPIO_LINE:-17}"
 
 sequence_csv="${STORED_STATE_SEQUENCE_CSV:-}"
 if [[ -z "$sequence_csv" && "${#STORED_STATE_SEQUENCE[@]}" -gt 0 ]]; then
@@ -37,9 +41,17 @@ if [[ -z "$sequence_csv" ]]; then
   exit 1
 fi
 
+confirm_args=()
+if [[ "$SKIP_CONFIRMATION" == "1" || "$SKIP_CONFIRMATION" == "true" ]]; then
+  confirm_args+=(--skip-confirmation)
+fi
+
 python3 "$REPO_ROOT/scripts/common/run_stored_states.py" \
   --database "$WAREHOUSE_DB" \
   --robot-id "$ROBOT_ID" \
   --sequence "$sequence_csv" \
   --duration "$MOVE_DURATION" \
+  --gpio-chip "$GPIO_CHIP" \
+  --gpio-line "$GPIO_LINE" \
+  "${confirm_args[@]}" \
   "$@"
