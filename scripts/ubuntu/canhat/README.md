@@ -52,3 +52,16 @@ the same JSONL waypoint file from Ubuntu:
 Press Enter to append a waypoint, or type a comment and press Enter. The default
 output is `recorded_waypoints/canhat_waypoints.jsonl`; override with `OUTPUT=...`
 if needed.
+
+## Stored State Replay
+
+RViz Stored States can be replayed from the Ubuntu machine after the CAN HAT
+robot launch is running on the Pi:
+
+```bash
+./scripts/ubuntu/canhat/run_stored_states.sh
+```
+
+Edit `STORED_STATE_SEQUENCE` near the top of that script to choose the Stored
+State names or row IDs. The script pauses before each step and only publishes
+the joint target after you press Enter.
