@@ -16,7 +16,7 @@ Usage:
 
 Modes:
   sim         Start only the kiosk backend in simulated mode. Best for UI and API testing.
-  rviz-sim    Start fake ros2_control + MoveIt + RViz + kiosk bridge for visible website-to-ROS simulation.
+  rviz-sim    Start fake ros2_control + MoveIt + RViz + kiosk bridge for visual testing.
   full        Start the full robot stack through robot.launch.py.
   smoke-test  Start the simulated kiosk backend in the background, verify the API, then exit.
 
@@ -115,8 +115,8 @@ source "$REPO_ROOT/install/setup.bash"
 set -u
 
 run_sim() {
-  log "Starting simulated kiosk backend on http://localhost:${PORT}"
-  exec ros2 run cove_kiosk_bridge kiosk_bridge --ros-args -p simulate_only:=true -p bind_port:="${PORT}"
+  log "Starting kiosk backend on http://localhost:${PORT}"
+  exec ros2 run cove_kiosk_bridge kiosk_bridge --ros-args -p bind_port:="${PORT}"
 }
 
 run_full() {
@@ -135,7 +135,7 @@ run_smoke_test() {
   local order_json
 
   log "Starting simulated kiosk backend for smoke test on http://localhost:${PORT}"
-  ros2 run cove_kiosk_bridge kiosk_bridge --ros-args -p simulate_only:=true -p bind_port:="${PORT}" >/tmp/cove_kiosk_smoke.log 2>&1 &
+  ros2 run cove_kiosk_bridge kiosk_bridge --ros-args -p bind_port:="${PORT}" >/tmp/cove_kiosk_smoke.log 2>&1 &
   server_pid=$!
 
   cleanup() {

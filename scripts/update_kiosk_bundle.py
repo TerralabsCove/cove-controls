@@ -38,6 +38,7 @@ let state = 'idle';
 let lastAppliedState = null;
 let queue = [];
 let currentOrder = null;
+let currentMotion = {};
 let servedToday = 37;
 let remotePhaseProgress = 0;
 let soundOn = true;
@@ -276,6 +277,14 @@ function setFillProgress(progress) {
   document.getElementById('fillPct').textContent = `${Math.round(pct * 100)}%`;
 }
 
+function motionActivityText(fallback) {
+  if (!currentMotion) return fallback;
+  const step = currentMotion.step || '';
+  const message = currentMotion.message || '';
+  if (step && message && step !== message) return `${step} - ${message}`;
+  return step || message || fallback;
+}
+
 function beep(nextState) {
   if (!soundOn) return;
   try {
@@ -366,7 +375,7 @@ function applyState(nextState, force = false) {
   if (activityText) {
     activityText.textContent = isCompletedMine
       ? `${currentOrder.name} order completed`
-      : (label.activity || 'Ready for your order');
+      : motionActivityText(label.activity || 'Ready for your order');
   }
 
   const eyebrow = document.getElementById('eyebrow-label');
@@ -420,7 +429,7 @@ function handleOffline(reason) {
   updateOrderButtonAvailability();
   document.getElementById('statustag').textContent = 'backend offline';
   document.getElementById('sysstatus').textContent = 'System - Bridge offline';
-  document.getElementById('sub').innerHTML = 'Waiting for the kiosk bridge. Start the ROS kiosk node and reload this page.';
+  document.getElementById('sub').innerHTML = 'Waiting for the kiosk bridge. Start the kiosk server on the Pi and reload this page.';
   console.warn(reason);
 }
 
@@ -429,8 +438,9 @@ function applySnapshot(snapshot) {
   lastSnapshot = snapshot;
   queue = Array.isArray(snapshot.queue) ? snapshot.queue : [];
   currentOrder = snapshot.current_order || null;
+  currentMotion = snapshot.motion || {};
   servedToday = Number(snapshot.served_today || 0);
-  remotePhaseProgress = Number(snapshot.phase_progress || 0);
+  remotePhaseProgress = Number(currentMotion.progress ?? snapshot.phase_progress ?? 0);
 
   document.getElementById('r-cups').textContent = String(snapshot.cups_remaining ?? 0);
   document.getElementById('r-served').textContent = String(servedToday);
@@ -441,7 +451,9 @@ function applySnapshot(snapshot) {
   const operatorLines = document.querySelectorAll('.oppanel .kv .v');
   if (operatorLines.length >= 6) {
     operatorLines[0].textContent = snapshot.uptime_human || operatorLines[0].textContent;
-    operatorLines[1].textContent = snapshot.connected ? (snapshot.motion_mode === 'simulated' ? 'simulated' : 'online') : 'waiting';
+    operatorLines[1].textContent = snapshot.connected
+      ? (currentMotion.running ? 'script running' : 'script ready')
+      : 'waiting';
     operatorLines[2].textContent = `${snapshot.cups_remaining ?? 0} / ${snapshot.cups_capacity ?? 0}`;
     operatorLines[3].textContent = snapshot.last_calibration || operatorLines[3].textContent;
     operatorLines[4].textContent = `${snapshot.served_today ?? 0} - avg ${formatSeconds(snapshot.average_cycle_seconds || 43)}`;
@@ -450,9 +462,19 @@ function applySnapshot(snapshot) {
 
   applyState(snapshot.state || 'idle');
 
+  if (currentMotion.step || currentMotion.message) {
+    const activityText = document.getElementById('activityText');
+    if (activityText && !(snapshot.state === 'arrived' && currentOrder && currentOrder.isMe)) {
+      activityText.textContent = motionActivityText(activityText.textContent);
+    }
+    document.getElementById('sysstatus').textContent = currentMotion.running
+      ? `Arm script - ${currentMotion.step || currentMotion.phase || 'running'}`
+      : `Arm script - ${currentMotion.step || 'ready'}`;
+  }
+
   if (!snapshot.connected && snapshot.state === 'idle') {
-    document.getElementById('statustag').textContent = 'waiting for robot';
-    document.getElementById('sysstatus').textContent = 'System - Waiting for joint states';
+    document.getElementById('statustag').textContent = 'waiting for script';
+    document.getElementById('sysstatus').textContent = 'System - Waiting for arm script';
   }
   if (snapshot.fault_message) {
     document.getElementById('sub').innerHTML = escapeHtml(snapshot.fault_message);

@@ -4,6 +4,7 @@ log/
 recorded_waypoints/
 .DS_Store
 __pycache__/
+node_modules/
 *.pyc
 *.pyo
 *.tar.gz

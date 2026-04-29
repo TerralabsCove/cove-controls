@@ -18,6 +18,7 @@ def _with_declared_entities(moveit_launch):
 
 def generate_launch_description():
     bind_port = LaunchConfiguration("bind_port")
+    motion_script_command = LaunchConfiguration("motion_script_command")
     use_fake_hardware = LaunchConfiguration("use_fake_hardware")
 
     moveit_config = (
@@ -36,6 +37,7 @@ def generate_launch_description():
     ld = LaunchDescription()
 
     ld.add_action(DeclareLaunchArgument("bind_port", default_value="8080"))
+    ld.add_action(DeclareLaunchArgument("motion_script_command", default_value=""))
     ld.add_action(DeclareLaunchArgument("use_fake_hardware", default_value="true"))
 
     for entity in _with_declared_entities(generate_static_virtual_joint_tfs_launch(moveit_config)):
@@ -72,9 +74,8 @@ def generate_launch_description():
             output="screen",
             parameters=[
                 {
-                    "simulate_only": False,
-                    "allow_simulation_fallback": False,
                     "bind_port": bind_port,
+                    "motion_script_command": motion_script_command,
                 }
             ],
         )

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import threading
 import time
 from dataclasses import dataclass, field
@@ -18,7 +19,6 @@ import rclpy
 from ament_index_python.packages import get_package_share_directory
 from rclpy.executors import ExternalShutdownException, MultiThreadedExecutor
 from rclpy.node import Node
-from sensor_msgs.msg import JointState
 
 from .motion_controller import CoveMotionController, MotionExecutionError
 
@@ -58,8 +58,8 @@ class CoveKioskBridge(Node):
         self.declare_parameter("bind_host", "0.0.0.0")
         self.declare_parameter("bind_port", 8080)
         self.declare_parameter("frontend_path", "")
-        self.declare_parameter("simulate_only", False)
-        self.declare_parameter("allow_simulation_fallback", True)
+        self.declare_parameter("motion_script_command", "")
+        self.declare_parameter("motion_script_cwd", "")
         self.declare_parameter("slot_open_seconds", 30.0)
         self.declare_parameter("initial_order_id", 2617)
         self.declare_parameter("cups_remaining", 148)
@@ -76,6 +76,12 @@ class CoveKioskBridge(Node):
         self._served_today = int(self.get_parameter("served_today").value)
         self._last_calibration = str(self.get_parameter("last_calibration").value)
         self._frontend_path = self._resolve_frontend_path(str(self.get_parameter("frontend_path").value))
+        package_share = Path(get_package_share_directory("cove_kiosk_bridge"))
+        default_script = package_share / "scripts" / "dummy_matcha_motion.py"
+        motion_script_command = str(self.get_parameter("motion_script_command").value).strip()
+        if not motion_script_command:
+            motion_script_command = "python3 " + shlex.quote(str(default_script))
+        motion_script_cwd = str(self.get_parameter("motion_script_cwd").value).strip()
 
         self._lock = threading.RLock()
         self._condition = threading.Condition(self._lock)
@@ -86,7 +92,6 @@ class CoveKioskBridge(Node):
         self._phase_started = time.monotonic()
         self._phase_duration = 0.0
         self._boot_time = time.time()
-        self._last_joint_state_wall = 0.0
         self._current_order_id: Optional[int] = None
         self._average_cycle_seconds = 43.0
         self._elevenlabs_api_key = os.environ.get("ELEVENLABS_API_KEY", "").strip()
@@ -99,15 +104,11 @@ class CoveKioskBridge(Node):
             self.DEFAULT_ELEVENLABS_MODEL,
         ).strip()
 
-        simulate_only = bool(self.get_parameter("simulate_only").value)
-        allow_fallback = bool(self.get_parameter("allow_simulation_fallback").value)
         self._motion = CoveMotionController(
             self,
-            simulate_only=simulate_only,
-            allow_simulation_fallback=allow_fallback,
+            script_command=motion_script_command,
+            script_cwd=motion_script_cwd,
         )
-
-        self.create_subscription(JointState, "/joint_states", self._joint_state_cb, 10)
 
         self._http_server = self._create_http_server()
         self._http_thread = threading.Thread(target=self._http_server.serve_forever, daemon=True)
@@ -184,18 +185,24 @@ class CoveKioskBridge(Node):
             current_order = self._find_order_locked(self._current_order_id)
             active_count = sum(1 for order in self._orders if order.status == "active")
             queued_count = sum(1 for order in self._orders if order.status == "queued")
-            connected = self._motion.simulate_only or (time.time() - self._last_joint_state_wall) < 2.5
+            motion = self._motion.snapshot()
+            motion_progress = motion.get("progress")
+            if isinstance(motion_progress, (int, float)) and self._state in self.PHASE_DURATIONS:
+                phase_progress = float(motion_progress)
+            else:
+                phase_progress = self._phase_progress_locked()
             return {
                 "state": self._state,
-                "phase_progress": self._phase_progress_locked(),
+                "phase_progress": phase_progress,
                 "queue": [order.as_public_dict() for order in self._orders],
                 "current_order": current_order.as_public_dict() if current_order else None,
                 "served_today": self._served_today,
                 "cups_remaining": self._cups_remaining,
                 "cups_capacity": self._cups_capacity,
                 "uptime_human": self._format_uptime(time.time() - self._boot_time),
-                "connected": connected,
-                "motion_mode": "simulated" if self._motion.simulate_only else "moveit",
+                "connected": True,
+                "motion_mode": "script",
+                "motion": motion,
                 "fault_message": self._fault_message or None,
                 "last_calibration": self._last_calibration,
                 "active_count": active_count,
@@ -265,11 +272,12 @@ class CoveKioskBridge(Node):
                     return
 
             try:
-                self._sleep_with_abort(self.PHASE_DURATIONS["received"])
-                self._set_phase("pouring", self.PHASE_DURATIONS["pouring"])
-                self._motion.run_pouring_sequence(self._should_abort)
-                self._set_phase("moving", self.PHASE_DURATIONS["moving"])
-                self._motion.run_moving_sequence(self._should_abort)
+                self._motion.run_order(
+                    next_order.id,
+                    next_order.name,
+                    self._should_abort,
+                    self._on_motion_event,
+                )
                 completed = self._complete_current_order()
                 hold_seconds = self._slot_open_seconds if completed and completed.isMe else 2.0
                 self._sleep_with_abort(hold_seconds)
@@ -309,15 +317,23 @@ class CoveKioskBridge(Node):
                 self._set_phase_locked("idle", 0.0)
             self._condition.notify_all()
 
-    def _joint_state_cb(self, _msg: JointState) -> None:
-        with self._lock:
-            self._last_joint_state_wall = time.time()
-
     def _resolve_frontend_path(self, configured_path: str) -> Path:
         if configured_path:
             return Path(configured_path).expanduser().resolve()
         package_share = Path(get_package_share_directory("cove_kiosk_bridge"))
         return package_share / "web" / "index.html"
+
+    def _on_motion_event(self, event: dict) -> None:
+        phase = str(event.get("phase", "")).strip()
+        if phase not in self.PHASE_DURATIONS and phase != "error":
+            return
+        with self._condition:
+            if phase == "error":
+                self._fault_message = str(event.get("message") or "Arm script reported an error.")
+                self._set_phase_locked("error", 0.0)
+            else:
+                self._set_phase_locked(phase, self.PHASE_DURATIONS.get(phase, 0.0))
+            self._condition.notify_all()
 
     def _should_abort(self) -> bool:
         with self._lock:

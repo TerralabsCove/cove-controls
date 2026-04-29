@@ -59,6 +59,37 @@ You should see:
 - motion follows the kiosk order sequence
 - you do not need to drag the robot manually
 
+## Raspberry Pi / iPad
+
+On the Raspberry Pi, build the workspace first, then start the kiosk server:
+
+```bash
+scripts/build_workspace.sh --packages-select cove_kiosk_bridge
+scripts/pi/run_cove_kiosk.sh
+```
+
+The launcher prints the iPad URL, for example:
+
+- `http://<raspberry-pi-ip>:8080`
+
+To run a real or test arm movement Python script instead of the bundled dummy
+script, set `MOTION_SCRIPT_COMMAND`:
+
+```bash
+MOTION_SCRIPT_COMMAND="python3 /home/pi/cove-controls/src/simple_assembly/motion_scripts/pick_and_place.py" scripts/pi/run_cove_kiosk.sh
+```
+
+The frontend tracks the script through `/api/state`. The backend watches stdout
+for these words and updates the kiosk state when it sees them:
+
+- `fetching`
+- `pouring`
+- `moving`
+- `done`
+
+Plain text lines are shown as script output. JSON lines also work if the script
+prints fields like `state`, `phase`, `status`, `step`, `message`, or `progress`.
+
 Important:
 
 - the website does not control RViz interactive markers

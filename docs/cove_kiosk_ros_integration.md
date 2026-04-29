@@ -2,15 +2,15 @@
 
 ## Summary
 
-This repository now supports a complete website-to-ROS simulation flow for the COVE kiosk.
+This repository now supports a website-to-Python-script control flow for the COVE kiosk.
 
 The frontend kiosk page can now:
 
 - submit orders to a ROS-backed kiosk bridge
-- drive a simulated robot arm through ROS 2 controllers
-- show robot activity in RViz
+- start the Python script that moves the arm
+- show live script activity on the kiosk frontend
 
-This is not just a timer-based UI demo anymore. A kiosk order now causes actual ROS trajectory execution against a fake `ros2_control` hardware backend.
+This is not just a timer-based UI demo anymore. A kiosk order now starts the configured arm movement script. The bundled dummy script is a placeholder until the final arm script is ready.
 
 ## What Was Accomplished
 
@@ -22,7 +22,7 @@ Current frontend behavior:
 
 - fetches state from `/api/state`
 - submits orders to `/api/orders`
-- reacts to backend queue and robot phase updates
+- reacts to backend queue and arm-script phase updates
 - no longer acts as the source of truth for order execution
 
 Relevant files:
@@ -43,26 +43,23 @@ This package provides:
 - queue ownership and order lifecycle management
 - slot assignment
 - operator fault/reset actions
-- motion sequencing for the robot
+- starting the configured Python arm movement script
+- tracking script stdout/status output
 
 Key file:
 
 - `src/cove_kiosk_bridge/cove_kiosk_bridge/kiosk_bridge_node.py`
 
-### 3. Visible RViz simulation path
+### 3. Script-driven motion path
 
-A proper simulation path was added:
+A script execution path was added:
 
 - website
 - kiosk bridge
-- trajectory action client
-- `joint_trajectory_controller`
-- fake `ros2_control` hardware
-- `joint_states`
-- `robot_state_publisher`
-- RViz
+- configured Python arm script
+- script stdout parsed into frontend state
 
-This allows kiosk orders to visibly move the robot model in RViz.
+This lets the kiosk submit an order from an iPad while the backend runs the same Python movement script family used for arm bring-up.
 
 ### 4. Fake hardware support
 
@@ -93,15 +90,15 @@ This launches:
 
 ### 6. Motion backend replacement
 
-The kiosk bridge no longer depends on `pymoveit2`.
+The kiosk bridge no longer owns arm motion directly.
 
-Instead, it now drives:
+Instead, it now starts a configured Python script and tracks its stdout.
 
-- `/arm_controller/follow_joint_trajectory`
+Default dummy script:
 
-using a direct ROS 2 action client.
+- `src/cove_kiosk_bridge/scripts/dummy_matcha_motion.py`
 
-This avoids an external Python dependency and works directly with the controller stack already present in the repo.
+The final arm script can replace it through the `motion_script_command` ROS parameter or the `MOTION_SCRIPT_COMMAND` environment variable in `scripts/pi/run_cove_kiosk.sh`.
 
 Key file:
 
@@ -128,18 +125,15 @@ Important modes:
 Kiosk Website
   -> HTTP POST /api/orders
   -> cove_kiosk_bridge
-  -> FollowJointTrajectory action client
-  -> /arm_controller/follow_joint_trajectory
-  -> joint_trajectory_controller
-  -> mock_components/GenericSystem
-  -> /joint_states
-  -> robot_state_publisher
-  -> RViz
+  -> configured Python arm script
+  -> stdout JSON/plain-text status lines
+  -> HTTP GET /api/state
+  -> kiosk frontend status display
 ```
 
 ## Motion execution model
 
-The bridge executes a fixed sequence of named waypoints.
+The bridge executes one configured script per order.
 
 Current phases:
 
@@ -160,7 +154,20 @@ Current waypoint flow:
 - `retreat`
 - `home`
 
-These are sent as `JointTrajectory` goals to the arm controller.
+The backend watches the real arm script stdout for these words and maps them to
+the kiosk state:
+
+- `fetching` -> order/script has started
+- `pouring` -> preparation phase
+- `moving` -> arm is moving toward pickup
+- `done` -> order completed
+
+Plain text output is enough. JSON lines are also supported if the script emits
+fields such as `state`, `phase`, `status`, `step`, `message`, or `progress`:
+
+```json
+{"phase":"pouring","step":"move pick","message":"Lowering arm to pickup pose","progress":0.36}
+```
 
 ## Fake vs real hardware
 
