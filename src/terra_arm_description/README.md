@@ -14,5 +14,9 @@ generated from Fusion document `MainArm/ArmAssem-copy` (v3).
 ROS 2: put this folder in your workspace `src/`, `colcon build`, source, then
 `ros2 launch urdf_tutorial display.launch.py model:=$(ros2 pkg prefix terra_arm_description)/share/terra_arm_description/urdf/arm.urdf`
 
-Caveats: masses are Fusion material defaults (not measured); joint effort/velocity
+Masses: corrected on 2026-10-31 from datasheets and weighed parts (total 14.35 kg, was 27.17 kg from
+Fusion defaults); see the header comment in `urdf/arm.urdf` and `scripts/step_reach_sim/apply_measured_masses.py`.
+Wiring and electronics are not modelled.
+
+Caveats: joint effort/velocity
 limits are placeholders; each gripper is a single rigid link (internal servos/jaws not articulated); zero pose is the straight arm.

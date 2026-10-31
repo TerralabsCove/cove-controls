@@ -1,13 +1,18 @@
 <?xml version="1.0"?>
 <!-- Generated from Fusion "ArmAssem-copy" (MainArm). Lengths m, mass kg, inertia kg*m^2.
      Zero pose = CAD pose. Joint effort/velocity are PLACEHOLDERS (no limits in the CAD).
-     Masses come from Fusion material assignments and are NOT verified. -->
+     Masses updated 2026-10-31 (scripts/step_reach_sim/apply_measured_masses.py), total 14.35 kg:
+       DM-J10010 1.485 kg and DM-J4340P 0.375 kg (user manuals; the motor is the plain DM-J10010-2EC
+       although the link names say J10010L); LiPo 3200 mAh 0.218 kg and 5000 mAh 0.689 kg (weighed);
+       slip ring 10.5 oz with aluminium base plate and pin; gripper: aluminium housing, TPU jaws and fingers,
+       steel pins, servos 3.52 oz each. Structure links keep the Fusion aluminium masses.
+       Not included: wiring, ESP boards, DC-DC converters, connectors, fasteners. -->
 <robot name="terra_arm">
   <link name="DM-J10010L-2EC_Motor_1">
     <inertial>
       <origin xyz="-0.00777044103 0.0264156494 0.00120587124" rpy="0 0 0"/>
-      <mass value="3.92262518"/>
-      <inertia ixx="0.00412367697" ixy="-0.000679750473" ixz="-3.03200629e-05" iyy="0.00623473851" iyz="9.82163364e-05" izz="0.00411141982"/>
+      <mass value="1.485"/>
+      <inertia ixx="0.00156111278" ixy="-0.000257335179" ixz="-1.14783573e-05" iyy="0.00236030369" iyz="3.71820536e-05" izz="0.00155647255"/>
     </inertial>
     <visual name="DM-J10010L-2EC_Motor_1">
       <origin xyz="0 0 0" rpy="0.0439357894 -0.00748243734 0.285762848"/>
@@ -66,8 +71,8 @@
   <link name="DM-J4340P-2EC_Motor_3">
     <inertial>
       <origin xyz="-0.000190007056 0.00161399421 -0.0294521743" rpy="0 0 0"/>
-      <mass value="0.386823391"/>
-      <inertia ixx="0.000173193491" ixy="-1.40574374e-08" ixz="-8.29911415e-08" iyy="0.00017304423" iyz="6.93132614e-07" izz="0.000157427689"/>
+      <mass value="0.375"/>
+      <inertia ixx="0.000167899772" ixy="-1.3627767e-08" ixz="-8.04544885e-08" iyy="0.000167755073" iyz="6.71946775e-07" izz="0.000152615857"/>
     </inertial>
     <visual name="DM-J4340P-2EC_Motor_3">
       <origin xyz="-3.63645206e-05 0.000308894471 1.3871056e-05" rpy="-1.57079633 0.0445679754 -1.45361096"/>
@@ -96,8 +101,8 @@
   <link name="LiPo_3200mAh_batt_3">
     <inertial>
       <origin xyz="-0.00533152772 -0.0166879844 0.0453343844" rpy="0 0 0"/>
-      <mass value="0.75831"/>
-      <inertia ixx="0.000580066253" ixy="-1.93512855e-05" ixz="-3.09451973e-06" iyy="0.000639644002" iyz="2.17452139e-05" izz="0.000151946149"/>
+      <mass value="0.218"/>
+      <inertia ixx="0.000166758243" ixy="-5.56313413e-06" ixz="-8.89616781e-07" iyy="0.000183885736" iyz="6.25134395e-06" izz="4.36816875e-05"/>
     </inertial>
     <visual name="LiPo_3200mAh_batt_3">
       <origin xyz="0 0 0" rpy="-0.0439357894 0.00748243734 -2.85582981"/>
@@ -111,8 +116,8 @@
   <link name="LiPo_3200mAh_batt_4">
     <inertial>
       <origin xyz="-0.00533152772 -0.0166879844 0.0453343844" rpy="0 0 0"/>
-      <mass value="0.75831"/>
-      <inertia ixx="0.000580066253" ixy="-1.93512855e-05" ixz="-3.09451973e-06" iyy="0.000639644002" iyz="2.17452139e-05" izz="0.000151946149"/>
+      <mass value="0.218"/>
+      <inertia ixx="0.000166758243" ixy="-5.56313413e-06" ixz="-8.89616781e-07" iyy="0.000183885736" iyz="6.25134395e-06" izz="4.36816875e-05"/>
     </inertial>
     <visual name="LiPo_3200mAh_batt_4">
       <origin xyz="0 0 0" rpy="-0.0439357894 0.00748243734 -2.85582981"/>
@@ -156,8 +161,8 @@
   <link name="DM-J4340P-2EC_Motor_1">
     <inertial>
       <origin xyz="0.000384223778 -0.00123730919 0.0294668654" rpy="0 0 0"/>
-      <mass value="0.386823391"/>
-      <inertia ixx="0.000173160172" ixy="6.37488596e-08" ixz="-2.02867273e-07" iyy="0.000173078422" iyz="6.57646048e-07" izz="0.000157426816"/>
+      <mass value="0.375"/>
+      <inertia ixx="0.000167867471" ixy="6.18003536e-08" ixz="-1.96666564e-07" iyy="0.00016778822" iyz="6.37544869e-07" izz="0.000152615011"/>
     </inertial>
     <visual name="DM-J4340P-2EC_Motor_1">
       <origin xyz="0 0 0" rpy="1.57145513 -0.0439345587 1.85688813"/>
@@ -171,8 +176,8 @@
   <link name="LiPo_5000mAh_Batt_2">
     <inertial>
       <origin xyz="-0.0227529401 -0.029106953 0.0779079682" rpy="0 0 0"/>
-      <mass value="0.67662868"/>
-      <inertia ixx="0.00152479919" ixy="-3.85179051e-06" ixz="-6.71757782e-06" iyy="0.00155706436" iyz="5.70617315e-05" izz="0.000271761924"/>
+      <mass value="0.689460402"/>
+      <inertia ixx="0.00155371579" ixy="-3.92483664e-06" ixz="-6.84497132e-06" iyy="0.00158659284" iyz="5.81438617e-05" izz="0.000276915672"/>
     </inertial>
     <visual name="LiPo_5000mAh_Batt_2">
       <origin xyz="0 0 0" rpy="1.57079633 0.0445679754 -1.45361096"/>
@@ -276,8 +281,8 @@
   <link name="LiPo_5000mAh_Batt_3">
     <inertial>
       <origin xyz="-0.0155239655 -0.0280259367 -0.0800507081" rpy="0 0 0"/>
-      <mass value="0.67662868"/>
-      <inertia ixx="0.00155702075" ixy="1.03612996e-05" ixz="-1.63570614e-05" iyy="0.00152498344" iyz="5.25950637e-05" izz="0.000271621281"/>
+      <mass value="0.689460402"/>
+      <inertia ixx="0.0015865484" ixy="1.05577934e-05" ixz="-1.666726e-05" iyy="0.00155390353" iyz="5.35924871e-05" izz="0.000276772362"/>
     </inertial>
     <visual name="LiPo_5000mAh_Batt_3">
       <origin xyz="0 0 0" rpy="-1.6147309 -0.000658172393 -2.85547191"/>
@@ -351,8 +356,8 @@
   <link name="DM-J10010L-2EC_Motor_3">
     <inertial>
       <origin xyz="-0.0263790445 -0.00310547587 -4.63343887e-06" rpy="0 0 0"/>
-      <mass value="3.92262518"/>
-      <inertia ixx="0.00640483034" ixy="0.000292087056" ixz="-4.41135781e-07" iyy="0.00395811292" iyz="-5.18558176e-08" izz="0.00410689203"/>
+      <mass value="1.485"/>
+      <inertia ixx="0.00242469587" ixy="0.000110576274" ixz="-1.67002098e-07" iyy="0.0014984347" iyz="-1.96312127e-08" izz="0.00155475846"/>
     </inertial>
     <visual name="DM-J10010L-2EC_Motor_3">
       <origin xyz="0.000993141649 0.00011691734 0" rpy="3.37417039e-10 -6.61704511e-11 1.68798169"/>
@@ -426,8 +431,8 @@
   <link name="DM-J10010L-2EC_Motor_2">
     <inertial>
       <origin xyz="-0.00748840517 0.0254568271 0.0011712087" rpy="0 0 0"/>
-      <mass value="3.92262518"/>
-      <inertia ixx="0.00412370784" ixy="-0.000679827199" ixz="-2.86396794e-05" iyy="0.00623477542" iyz="9.77877764e-05" izz="0.00411135204"/>
+      <mass value="1.485"/>
+      <inertia ixx="0.00156112447" ixy="-0.000257364225" ixz="-1.08422095e-05" iyy="0.00236031766" iyz="3.70198123e-05" izz="0.00155644689"/>
     </inertial>
     <visual name="DM-J10010L-2EC_Motor_2">
       <origin xyz="0.000281932727 -0.000958428366 -4.3920426e-05" rpy="3.09765809 -0.000658172393 -2.85547191"/>
@@ -441,8 +446,8 @@
   <link name="DM-J4340P-2EC_Motor_4">
     <inertial>
       <origin xyz="8.97476741e-11 1.88459328e-10 0.0294953338" rpy="0 0 0"/>
-      <mass value="0.386823391"/>
-      <inertia ixx="0.000173194449" ixy="-1.58291595e-08" ixz="0" iyy="0.000173074404" iyz="1.67835818e-12" izz="0.000157396557"/>
+      <mass value="0.375"/>
+      <inertia ixx="0.000167900701" ixy="-1.53453358e-08" ixz="0" iyy="0.000167784325" iyz="1.62705858e-12" izz="0.000152585677"/>
     </inertial>
     <visual name="DM-J4340P-2EC_Motor_4">
       <origin xyz="0 0 0" rpy="1.57079633 -1.27816903e-10 -1.96150243"/>
@@ -470,9 +475,9 @@
   </link>
   <link name="SlipRing_2_stator">
     <inertial>
-      <origin xyz="5.1735455e-05 -2.13088325e-05 -0.030471725" rpy="0 0 0"/>
-      <mass value="2.10570352"/>
-      <inertia ixx="0.00152242317" ixy="1.91854992e-06" ixz="-2.74795464e-06" iyy="0.00152629098" iyz="1.13182918e-06" izz="0.00208394642"/>
+      <origin xyz="0.000172940632 -7.12309655e-05 -0.0257285244" rpy="0 0 0"/>
+      <mass value="0.373786227"/>
+      <inertia ixx="0.000299118113" ixy="1.13648225e-06" ixz="-1.4269932e-06" iyy="0.00030140927" iyz="5.87751103e-07" izz="0.000378628346"/>
     </inertial>
     <visual name="BasePlate_1">
       <origin xyz="0 0 0" rpy="3.14159265 3.79208216e-10 -0.390706101"/>
@@ -494,8 +499,8 @@
   <link name="DM-J4340P-2EC_Motor_2">
     <inertial>
       <origin xyz="-0.000384223662 0.0012373088 -0.0294668654" rpy="0 0 0"/>
-      <mass value="0.386823391"/>
-      <inertia ixx="0.000173193749" ixy="1.16159182e-08" ixz="-2.05495165e-07" iyy="0.000173044841" iyz="6.56919253e-07" izz="0.00015742682"/>
+      <mass value="0.375"/>
+      <inertia ixx="0.000167900022" ixy="1.12608736e-08" ixz="-1.99214134e-07" iyy="0.000167755665" iyz="6.36840288e-07" izz="0.000152615015"/>
     </inertial>
     <visual name="DM-J4340P-2EC_Motor_2">
       <origin xyz="0 0 0" rpy="-1.57013752 -0.0439345587 1.85688813"/>
@@ -508,9 +513,9 @@
   </link>
   <link name="SlipRing_2_rotor">
     <inertial>
-      <origin xyz="-1.97872664e-12 0 -0.00463948118" rpy="0 0 0"/>
-      <mass value="0.13463513"/>
-      <inertia ixx="7.38171049e-05" ixy="0" ixz="0" iyy="7.38171061e-05" iyz="0" izz="1.92215907e-05"/>
+      <origin xyz="-9.32568634e-12 7.42143097e-13 -0.00185875455" rpy="0 0 0"/>
+      <mass value="0.115269516"/>
+      <inertia ixx="6.48376083e-05" ixy="4.34864863e-12" ixz="-3.29005916e-14" iyy="6.48376187e-05" iyz="1.84648983e-14" izz="1.37857074e-05"/>
     </inertial>
     <visual name="PinBase_1">
       <origin xyz="1.43794664e-11 0 0.0360125" rpy="3.14159265 3.79208216e-10 -0.390706101"/>
@@ -547,9 +552,9 @@
   </link>
   <link name="SlipRing_1_stator">
     <inertial>
-      <origin xyz="0.000450620072 -0.00126247645 0.0304422773" rpy="0 0 0"/>
-      <mass value="2.10570352"/>
-      <inertia ixx="0.00152223571" ixy="-1.88813625e-06" ixz="1.00988145e-05" iyy="0.00152755678" iyz="-2.24985101e-05" izz="0.00208286807"/>
+      <origin xyz="0.000514586836 -0.00102650635 0.0257035685" rpy="0 0 0"/>
+      <mass value="0.373786227"/>
+      <inertia ixx="0.000298958692" ixy="-9.72207845e-07" ixz="2.47998836e-06" iyy="0.000301718808" iyz="-2.78075311e-06" izz="0.000378478229"/>
     </inertial>
     <visual name="BasePlate_1">
       <origin xyz="0 0 0" rpy="0.0439345682 0.000658172393 0.286120739"/>
@@ -570,9 +575,9 @@
   </link>
   <link name="EndEffectorAssembly_v3_2">
     <inertial>
-      <origin xyz="0.00257292609 7.7902305e-05 -0.0122393146" rpy="0 0 0"/>
-      <mass value="1.36223202"/>
-      <inertia ixx="0.0024554091" ixy="6.52719256e-05" ixz="-5.36405452e-05" iyy="0.00256719249" iyz="0.000171507696" izz="0.00103854594"/>
+      <origin xyz="0.00195688821 -0.000417740694 -0.00254362616" rpy="0 0 0"/>
+      <mass value="0.911573759"/>
+      <inertia ixx="0.00127208198" ixy="2.6352131e-05" ixz="-3.71787878e-05" iyy="0.00131512075" iyz="4.25249383e-05" izz="0.000758832324"/>
     </inertial>
     <visual name="CamRotor_v1_1">
       <origin xyz="-4.19255733e-12 0 -0.0105" rpy="-1.57079633 -1.67683981e-10 -2.0689073"/>
@@ -777,9 +782,9 @@
   </link>
   <link name="SlipRing_1_rotor">
     <inertial>
-      <origin xyz="6.04366346e-05 -0.000194623049 0.00463500322" rpy="0 0 0"/>
-      <mass value="0.13463513"/>
-      <inertia ixx="7.38078404e-05" ixy="2.98336097e-08" ixz="-7.10507148e-07" iyy="7.37210321e-05" iyz="2.28803388e-06" izz="1.93269293e-05"/>
+      <origin xyz="2.42132318e-05 -7.79734793e-05 0.00185696051" rpy="0 0 0"/>
+      <mass value="0.115269516"/>
+      <inertia ixx="6.48289444e-05" ixy="2.78944815e-08" ixz="-6.64390551e-07" iyy="6.47477811e-05" iyz="2.13952557e-06" izz="1.38842089e-05"/>
     </inertial>
     <visual name="PinBase_1">
       <origin xyz="-0.000469120194 0.00151069964 -0.0359777413" rpy="0.0439345682 0.000658172393 0.286120739"/>
@@ -816,9 +821,9 @@
   </link>
   <link name="EndEffectorAssembly_v3_1">
     <inertial>
-      <origin xyz="-0.000187344959 -0.00306200991 0.0121250087" rpy="0 0 0"/>
-      <mass value="1.36223202"/>
-      <inertia ixx="0.00258359356" ixy="4.51500443e-05" ixz="0.0001468453" iyy="0.00244659823" iyz="-1.26800897e-05" izz="0.00103095574"/>
+      <origin xyz="0.000243713444 -0.00209470265 0.00245494955" rpy="0 0 0"/>
+      <mass value="0.911573759"/>
+      <inertia ixx="0.00132104105" ixy="1.94305913e-05" ixz="3.19183698e-05" iyy="0.00126966645" iyz="-2.02121021e-05" izz="0.000755327554"/>
     </inertial>
     <visual name="CamRotor_v1_1">
       <origin xyz="0.00013677923 -0.000440467788 0.0104898656" rpy="1.61454854 -0.00405383498 0.393422459"/>
