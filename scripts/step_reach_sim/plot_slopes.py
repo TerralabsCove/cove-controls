@@ -17,6 +17,6 @@ for ax, k, t in zip(axes, ["max_r_rated", "max_r_peak"], ["Within rated (continu
     ax.set_title(t, color=TXT, fontsize=10, loc="left")
 axes[0].set_ylabel("Max step length along the surface (m)", color=TXT2, fontsize=9)
 axes[1].legend(fontsize=8, frameon=False, labelcolor=TXT, loc="center right")
-fig.suptitle("Step length on inclines, walls and ceilings (datasheet motor masses; gripper hold strength NOT included)",
+fig.suptitle("Step length on inclines, walls and ceilings (14.35 kg arm; gripper hold strength NOT included)",
              color=TXT, fontsize=10.5, x=0.05, ha="left")
 fig.tight_layout(); fig.savefig("out/fig4_slopes.png", dpi=130, bbox_inches="tight")

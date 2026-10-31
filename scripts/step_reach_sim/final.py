@@ -8,7 +8,7 @@ dr, dh = RS[1] - RS[0], HS[1] - HS[0]
 ext = [RS[0] - dr / 2, RS[-1] + dr / 2, HS[0] - dh / 2, HS[-1] + dh / 2]
 LAY = [("Geometric reach, both grippers vertical", lambda s: d["kin"], "#dbe8f8"),
        ("+ no self-collision or terrain collision (also within peak torque)", lambda s: d["feas"][s], "#7fb0ea"),
-       ("+ within rated (continuous) torque, datasheet motor masses", lambda s: d["feas"][s] & (d["rated"][s, 1] <= 1), "#1d5aa8")]
+       ("+ within rated (continuous) torque", lambda s: d["feas"][s] & (d["rated"][s, 1] <= 1), "#1d5aa8")]
 
 # Fig 1: maps
 fig, axes = plt.subplots(1, 2, figsize=(10.5, 6.2), sharey=True, facecolor=SURF)
@@ -18,9 +18,6 @@ for s, ax in enumerate(axes):
         ax.imshow(np.where(fn(s), 1.0, np.nan), origin="lower", cmap=matplotlib.colors.ListedColormap([c]),
                   extent=ext, aspect="equal", interpolation="nearest")
         if s == 0: ax.plot([], [], "s", color=c, ms=9, label=lab)
-    m = d["feas"][s] & (d["rated"][s, 0] <= 1)
-    ax.contour(RS, HS, m.astype(float), levels=[0.5], colors=[TXT], linewidths=1.0, linestyles="--")
-    if s == 0: ax.plot([], [], "--", color=TXT, lw=1, label="Rated-torque limit with URDF masses (heavier)")
     ax.axhline(0, color=TXT2, lw=0.8)
     ax.set_title(["Step onto/off a ledge whose edge is at the TARGET foot", "...whose edge is at the STANCE foot"][s], color=TXT, fontsize=9.5, loc="left")
     ax.set_xlabel("Step length r: horizontal distance between dock centres (m)", color=TXT2, fontsize=9)
@@ -35,8 +32,7 @@ fig.savefig("out/fig1_foothold_map.png", dpi=130); plt.close(fig)
 best = d["feas"][0] | d["feas"][1]
 curves = [("Geometric reach (no collisions checked)", d["kin"], CAT[0], (0, (4, 3))),
           ("Collision-free, best ledge layout (= within peak torque)", best, CAT[0], "-"),
-          ("+ rated torque, datasheet motor masses", (d["feas"] & (d["rated"][:, 1] <= 1)).any(0), CAT[1], "-"),
-          ("+ rated torque, URDF masses", (d["feas"] & (d["rated"][:, 0] <= 1)).any(0), CAT[2], "-")]
+          ("+ within rated torque", (d["feas"] & (d["rated"][:, 1] <= 1)).any(0), CAT[1], "-")]
 fig, ax = plt.subplots(figsize=(7.6, 6.4), facecolor=SURF); style(ax)
 env = {}
 for lab, m, c, ls in curves:
@@ -46,10 +42,10 @@ ax.axhline(0, color=TXT2, lw=0.8)
 ax.set_xlabel("Max step length r (m)", color=TXT2, fontsize=9); ax.set_ylabel("Step height h (m)", color=TXT2, fontsize=9)
 ax.set_xlim(0, 0.95); ax.set_ylim(-0.92, 0.92); ax.set_aspect("equal")
 ax.legend(fontsize=8, frameon=False, labelcolor=TXT, loc="upper left", bbox_to_anchor=(1.0, 1.0))
-ax.set_title("Max step length vs step height", color=TXT, fontsize=10, loc="left")
+ax.set_title("Max step length vs step height (14.35 kg arm)", color=TXT, fontsize=10, loc="left")
 fig.tight_layout(); fig.savefig("out/fig2_envelope.png", dpi=130, bbox_inches="tight"); plt.close(fig)
 
-print("h     geo   coll  rated_ds rated_urdf")
+print("h     geo   coll  rated")
 for i, h in enumerate(HS):
     if round(h * 100) % 10 == 0 or abs(abs(h) - 0.66) < 1e-6:
         print(f"{h:+.2f} " + " ".join("  -  " if np.isnan(env[l][i]) else f"{env[l][i]:.2f} " for l, *_ in curves))
