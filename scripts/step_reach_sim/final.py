@@ -55,7 +55,7 @@ def pick(r, h, s=0):
     i, j = int(np.argmin(abs(HS - h))), int(np.argmin(abs(RS - r)))
     return HS[i], RS[j], d["qbest"][s, i, j]
 cases = []
-for title, r, h, s in [("Longest flat step 0.84 m", 0.84, 0.0, 0), ("Flat step at rated torque 0.44 m", 0.44, 0.0, 0),
+for title, r, h, s in [("Longest flat step 0.84 m", 0.84, 0.0, 0), ("Flat step at rated torque 0.58 m", 0.58, 0.0, 0),
                        ("Highest step up 0.66 m (r=0.40)", 0.40, 0.66, 0), ("Deepest step down 0.66 m (r=0.40)", 0.40, -0.66, 1)]:
     hh, rr, q = pick(r, h, s)
     if title.startswith("Flat step at rated"):
