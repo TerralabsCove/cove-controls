@@ -47,7 +47,7 @@ class CarryPlanner(Planner):
         c = carry or self.carry
         M = self.M[stance]
         Ts = X[M.swing] @ M.dock[M.swing]
-        p = Ts[:3, 3] - WORK_XYZ
+        p = Ts[:3, 3] - c.get("center", WORK_XYZ)
         th = np.arctan2(p[1], p[0])
         d0, d1 = abs(wrapd(th - c["th0"])), abs(wrapd(th - c["th1"]))
         u = d0 / max(d0 + d1, 1e-9)
