@@ -421,8 +421,12 @@ def main(preview=False):
             r = v / SPEC[MOTOR[nm]]["rated"]
             if r > worst: worst, wname = r, (nm, k, ph)
     print(f"worst rated ratio over clip {worst:.2f} at {wname}; moves planned without the rated cap: {relaxed}")
-    torque_txt = ("Every move stays within the motors' rated torque." if worst <= 1 else
-                  f"Motors reach up to {worst:.1f}x rated torque mid-swing, under peak.")
+    if worst <= 1:
+        torque_txt = "Every move stays within the motors' rated torque."
+    elif worst <= 1.15:
+        torque_txt = f"Motors stay within rated torque, apart from a brief {round((worst - 1) * 100)}% over on one motor, well under peak."
+    else:
+        torque_txt = f"Motors reach up to {worst:.1f}x rated torque, under peak."
     end_txt = ("Concept simulation, not real speed. The stones are light props with a dock on top: the robot only grips docks. "
                f"{torque_txt} Tree 6 ft 10 in.")
     model, names = build_glade(P, S, os.path.abspath("mjtmp/glade"))
