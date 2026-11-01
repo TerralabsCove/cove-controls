@@ -39,7 +39,7 @@ def wrapd(a):
 
 
 class CarryPlanner(Planner):
-    """Planner whose free gripper may hold a block: carry = dict(th0, th1, yaw0, dyaw)."""
+    """Planner whose free gripper may hold a block: carry = dict(th0, th1, yaw0, dyaw[, center, size, mass])."""
     carry = None
     next_carry = None   # block the empty gripper is about to pick: counted at the pick pose
 
@@ -58,7 +58,7 @@ class CarryPlanner(Planner):
         psi = np.arctan2(t @ R[:, 1], t @ R[:, 0])
         Tb = np.eye(4)
         Tb[:3, :3] = R @ Rz3(psi)
-        Tb[:3, 3] = Ts[:3, 3] + R[:, 2] * BLOCK[2] / 2
+        Tb[:3, 3] = Ts[:3, 3] + R[:, 2] * np.asarray(c.get("size", BLOCK))[2] / 2
         return Tb
 
     def collides(self, stance, X, swing_foot_free):
@@ -71,7 +71,7 @@ class CarryPlanner(Planner):
         if Ts[:3, 2] @ np.array(DOWN) < np.cos(TILT_MAX):
             return True
         Tb = self.block_pose(stance, X)
-        ob = fcl.CollisionObject(fcl.Box(*(BLOCK - 0.004)), fcl.Transform(Tb[:3, :3], Tb[:3, 3]))
+        ob = fcl.CollisionObject(fcl.Box(*(np.asarray(self.carry.get("size", BLOCK)) - 0.004)), fcl.Transform(Tb[:3, :3], Tb[:3, 3]))
         for b in self.boxes:
             for o in getattr(b, "objs", [b.obj]):
                 if fcl.collide(ob, o, fcl.CollisionRequest(), fcl.CollisionResult()):
@@ -90,7 +90,9 @@ class CarryPlanner(Planner):
             return t, w
         return self.carry_torques(stance, X, c), w
 
-    def carry_torques(self, stance, X, carry=None, mass=BLOCK_KG):
+    def carry_torques(self, stance, X, carry=None, mass=None):
+        c = carry or self.carry
+        mass = c.get("mass", BLOCK_KG) if mass is None else mass
         M = self.M[stance]
         Mm = M.mass["datasheet_motors"]
         pc = self.block_pose(stance, X, carry)[:3, 3]
