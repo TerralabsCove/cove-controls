@@ -17,6 +17,7 @@ JOINT_LABEL = [("SlipRing_1_spin", "A gripper spin"), ("Revolute_22", "A pitch")
                ("Revolute_44", "Middle pitch"), ("Revolute_73", "B roll"), ("Revolute_29", "B pitch"),
                ("SlipRing_2_spin", "B gripper spin")]
 END = {EE_A: "A", EE_B: "B"}
+ARM_KG = sum(L["mass"] for L in Arm(PKG + "/urdf/arm.urdf").links.values())
 
 
 def floor(x0=-1.5, x1=3.5, y=3.0, top=0.0):
@@ -94,7 +95,7 @@ def plan_scenario(sc, seed=0):
     for x in sols:
         X = P.frames(s, x, Tws)
         if not P.collides(s, X, False):
-            good.append((P.peak_ratio(s, X, x), x))
+            good.append((P.M[s].ratios(P.load(s, X, x)[0])[0], x))   # lowest rated-torque ratio
     if not good:
         raise RuntimeError("no start pose")
     x6 = min(good, key=lambda t: t[0])[1]
@@ -203,8 +204,8 @@ def panel(t, wrench, title, step, nsteps, phase, stance, note):
                 d.text((18, y), line.strip(), fill=(227, 73, 72), font=f); y += 20; line = ""
             line += " " + w_
         d.text((18, y), line.strip(), fill=(227, 73, 72), font=f)
-    d.text((18, H - 46), "Quasi-static. Masses: datasheet motors (10010 1.485 kg,", fill=(82, 81, 78), font=fs)
-    d.text((18, H - 30), "4340 0.375 kg), rest from URDF; 19.8 kg total.", fill=(82, 81, 78), font=fs)
+    d.text((18, H - 46), f"Quasi-static. Arm {ARM_KG:.2f} kg (corrected URDF: datasheet", fill=(82, 81, 78), font=fs)
+    d.text((18, H - 30), "motors, weighed batteries, slip rings, servos).", fill=(82, 81, 78), font=fs)
     return img
 
 

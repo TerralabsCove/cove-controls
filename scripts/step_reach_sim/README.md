@@ -35,12 +35,12 @@ Run from this folder, in this order for the plots: `sweep.py EndEffectorAssembly
 
 ## Assumptions to revisit
 
-- **Masses.** The URDF uses Fusion default materials. The DM-J10010 (3.92 kg), the 3200 mAh packs and the
-  slip-ring bases come out as solid steel. Torque runs use the datasheet motor masses (10010 1.485 kg,
-  4340 0.375 kg) and URDF masses for everything else (19.8 kg total). `mass_sens.py` shows how much lighter
-  packs and bases would change things.
+- **Masses.** The URDF masses were corrected on 2026-10-31 (`apply_measured_masses.py`): datasheet motors,
+  weighed batteries, slip rings and gripper servos, CAD aluminium and TPU for the rest. The arm is 14.35 kg.
+  Wiring, ESP boards and fasteners are not modelled. The `datasheet_motors` mass model in `step_reach.py`
+  now equals the URDF; results before 2026-10-31 were run at 19.8 kg.
 - **Motor limits** (`SPEC` in `step_reach.py`): DM-J10010-2EC 40 Nm rated / 150 Nm peak, DM-J4340P-2EC 9 / 27 Nm,
-  from the user manuals. The URDF names the motor `DM-J10010L`, which other listings rate at 120 Nm peak.
+  from the user manuals. The URDF link names say `DM-J10010L`, but the motor is the plain 10010.
 - **Joint ranges** come only from mesh collisions. Cable limits on the non-slip-ring joints are not modelled.
 - **Lift-out distance** before a swing is 12 cm (`LIFT` in `plan.py`), because the CAD fin-ray fingers stick
   out 8 cm past the dock frame.

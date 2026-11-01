@@ -74,9 +74,9 @@ def envelope_plot(d, stance):
     best = lambda i: d["feas"][0][:, :] | d["feas"][1] if i is None else None
     curves = [("Geometric reach", d["kin"], CAT[0], "--"),
               ("Collision-free (best ledge layout)", d["feas"][0] | d["feas"][1], CAT[0], "-"),
-              ("+ torque <= peak, datasheet motor masses",
+              ("+ torque <= peak",
                (d["feas"] & (d["peak"][:, 1] <= 1)).any(0), CAT[1], "-"),
-              ("+ torque <= rated, datasheet motor masses",
+              ("+ torque <= rated",
                (d["feas"] & (d["rated"][:, 1] <= 1)).any(0), CAT[2], "-")]
     for lab, m, c, ls in curves:
         e = envelope(m, RS)
