@@ -19,7 +19,7 @@ STRICT = 0.26                     # max static torque / peak on swings = within 
 TREE = np.array([1.60, 1.00])
 POND = np.array([-0.55, 1.15])
 D = {"D0": (-1.35, -0.35), "D1": (-0.90, -0.32), "D2": (-0.45, -0.25), "D3": (0.00, -0.15),
-     "D4": (0.45, -0.02), "W": (0.90, 0.12), "D6": (0.50, 0.50), "D7": (0.85, 0.85)}
+     "D4": (0.45, -0.02), "W": (0.90, 0.12), "D6": (0.50, 0.50), "D7": (0.78, 0.93)}
 LEAF = np.array([-0.12, -0.55])
 CAIRN = np.array([1.02, 0.45])
 # stones: semi-axes (m), mass (kg), start xy, start yaw. Base stone is part of the set and does not move.
@@ -178,42 +178,75 @@ class Run:
         self.snap("hold", self.x6, n=14)
 
 
-def plan(seed):
-    R = Run(seed)
-    R.start("D0", "D1")
-    R.walk(EE_B, "D2")
-    R.walk(EE_A, "D3")
-    # a leaf by the trail: B is the free end, A holds D3
-    leaf = np.array([LEAF[0], LEAF[1], 0.0])
-    R.look(EE_B, leaf, (0.25, 0.05, -1.0), 0.17, hold=45, sniff=0.07, label="look at leaf")
-    R.look(EE_B, leaf, (-0.35, -0.30, -1.0), 0.14, hold=50, wiggle=0.8, label="look again, other side")
-    R.walk(EE_B, "D4")
-    R.walk(EE_A, "W")
-    # the stones
-    R.carry_stone(0)
-    R.carry_stone(1)
-    top = np.array([CAIRN[0], CAIRN[1], R.top_z + 0.02])
-    R.look(EE_B, top, (0.55, 0.85, -0.7), 0.22, hold=45, label="look at the cairn")
-    R.carry_stone(2)
-    # step back and look at it
-    R.walk(EE_B, "D6")
-    top = np.array([CAIRN[0], CAIRN[1], R.top_z])
-    R.look(EE_A, top, (0.15, 1.0, -0.35), 0.24, hold=55, wiggle=0.7, label="step back, look at the cairn")
-    R.walk(EE_A, "D7")
-    # wander off: look up at the tree
+STATE = ("frames", "stance", "Tws", "x6", "at", "stones", "top_z", "k", "relaxed")
+CKPT = "plans/construction/glade_ckpt.pkl"
+
+
+def tree_look(R):
     d = np.array([D["D7"][0], D["D7"][1]]) - TREE; d /= np.linalg.norm(d)
-    done = False
     for h, gap in [(0.75, 0.20), (0.65, 0.20), (0.85, 0.22), (0.55, 0.18), (0.70, 0.26)]:
         bark = np.array([*(TREE + trunk_radius(h) * d), h])
         n = np.array([-d[0], -d[1], 0.35])
         try:
             R.look(EE_B, bark, n, gap, hold=70, wiggle=0.9, label=f"look up at the tree (h={h})")
-            done = True
-            break
+            return
         except RuntimeError as e:
             print("   tree look failed at", h, e, flush=True)
-    if not done:
-        raise RuntimeError("no tree look")
+    raise RuntimeError("no tree look")
+
+
+LEAF3 = np.array([LEAF[0], LEAF[1], 0.0])
+ACTIONS = [
+    lambda R: R.walk(EE_B, "D2"),
+    lambda R: R.walk(EE_A, "D3"),
+    # a leaf by the trail: B is the free end, A holds D3
+    lambda R: R.look(EE_B, LEAF3, (0.25, 0.05, -1.0), 0.17, hold=45, sniff=0.07, label="look at leaf"),
+    lambda R: R.look(EE_B, LEAF3, (-0.35, -0.30, -1.0), 0.14, hold=50, wiggle=0.8, label="look again, other side"),
+    lambda R: R.walk(EE_B, "D4"),
+    lambda R: R.walk(EE_A, "W"),
+    # the stones
+    lambda R: R.carry_stone(0),
+    lambda R: R.carry_stone(1),
+    lambda R: R.look(EE_B, np.array([CAIRN[0], CAIRN[1], R.top_z + 0.02]), (0.55, 0.85, -0.7), 0.22, hold=45, label="look at the cairn"),
+    lambda R: R.carry_stone(2),
+    # step back and look at it from the trail side, so the way to the tree does not cross the cairn
+    lambda R: R.walk(EE_B, "D6"),
+    lambda R: R.look(EE_A, np.array([CAIRN[0], CAIRN[1], R.top_z]), (1.0, -0.1, -0.35), 0.24, hold=55, wiggle=0.7, label="step back, look at the cairn"),
+    lambda R: R.walk(EE_A, "D7"),
+    # wander off: look up at the tree
+    tree_look,
+]
+
+
+def plan(seed=0):
+    """Runs ACTIONS in order, checkpointing after each; a failed action is retried with a fresh rng."""
+    R = Run(seed)
+    save = lambda st: pickle.dump(dict(stage=st, **{a: getattr(R, a) for a in STATE}), open(CKPT, "wb"))
+
+    def restore():
+        ck = pickle.load(open(CKPT, "rb"))
+        for a in STATE:
+            setattr(R, a, ck[a])
+        R.P.carry = R.P.next_carry = None
+        R.P.max_peak = None
+        return ck["stage"]
+    if os.path.exists(CKPT):
+        stage = restore(); print("  resumed at stage", stage, flush=True)
+    else:
+        R.start("D0", "D1"); stage = 0; save(stage)
+    while stage < len(ACTIONS):
+        for attempt in range(5):
+            try:
+                ACTIONS[stage](R)
+                break
+            except RuntimeError as e:
+                print(f"   stage {stage} attempt {attempt} failed: {e}", flush=True)
+                restore()
+                R.rng = np.random.default_rng([seed, stage, attempt + 1])
+        else:
+            raise RuntimeError(f"stage {stage} failed")
+        stage += 1
+        save(stage)
     R.snap("done", R.x6, n=24)
     return R
 
