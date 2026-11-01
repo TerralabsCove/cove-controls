@@ -119,7 +119,7 @@ def captions(cap_txt, k2):
         (9, "Section done: 2 ft 7 in (0.80 m) of wall from one stop. It parks the free end in the next floor dock."),
         (10, "It steps along the row to the next work position, next to the next pile."),
         (k2, "Second section, shown 3x faster."),
-        (k2 + 8, f"{wall_len / 0.3048:.0f} ft ({wall_len:.1f} m) of wall, two courses high. Every stop adds another 2 ft 7 in."),
+        (k2 + 8, f"{ftin(wall_len)} ({wall_len:.1f} m) of wall, two courses high. Every stop adds another 2 ft 7 in."),
         ("end", cap_txt),
         ("end", "Open items: a dock built into the material, how blocks lock to each other, and payload tests on hardware."),
     ]
