@@ -46,7 +46,7 @@ def dockT(name):
 
 
 def scene():
-    floor = floor_box(-8.0, 8.0, -8.0, 8.0)
+    floor = floor_box(-25.0, 25.0, -25.0, 25.0)
     mesh, objs = trunk(tuple(TREE))
     v = mesh.vertices
     tree = Multi(objs, (v.min(0), v.max(0)))
@@ -287,8 +287,8 @@ def build_glade(P, S, tmp):
     # ground: moss
     b = S["floor"]
     g(f'<geom type="box" size="{" ".join(map(str, b.size / 2))}" pos="{" ".join(map(str, b.c))}" material="moss" contype="0" conaffinity="0"/>')
-    for _ in range(120):   # moss patches
-        x, y = rng.uniform(-5.0, 6.0), rng.uniform(-3.0, 6.0)
+    for _ in range(170):   # moss patches
+        x, y = rng.uniform(-6.0, 7.0), rng.uniform(-3.0, 9.0)
         r1, r2 = rng.uniform(0.15, 0.45), rng.uniform(0.12, 0.35)
         c = rng.choice(["0.36 0.46 0.25 1", "0.42 0.52 0.28 1", "0.33 0.42 0.24 1", "0.47 0.55 0.32 1"])
         g(f'<geom type="ellipsoid" size="{r1:.3f} {r2:.3f} 0.006" pos="{x:.3f} {y:.3f} 0.0" quat="{q2s(quat_yaw(rng.uniform(0, 3.14)))}" rgba="{c}" contype="0" conaffinity="0"/>')
@@ -339,8 +339,8 @@ def build_glade(P, S, tmp):
         a, b_, c = st["semi"]
         bodies.append(f'<body name="st{i}" mocap="true"><geom type="ellipsoid" size="{a} {b_} {c}" rgba="{STONE_RGBA[i]}" contype="0" conaffinity="0"/>'
                       f'<geom type="mesh" mesh="dock" pos="0 0 {c - 0.004}" quat="0 1 0 0" rgba="{teal}" contype="0" conaffinity="0"/></body>')
-    xml = f"""<mujoco><compiler/><visual><global offwidth="{W}" offheight="{H}"/><quality shadowsize="4096"/>
-      <headlight ambient="0.40 0.40 0.38" diffuse="0.38 0.38 0.36"/></visual>
+    xml = f"""<mujoco><compiler/><statistic extent="4" center="0.5 0.5 0.3"/><visual><global offwidth="{W}" offheight="{H}"/><quality shadowsize="4096"/>
+      <headlight ambient="0.40 0.40 0.38" diffuse="0.38 0.38 0.36"/><map fogstart="1.1" fogend="3.2"/><rgba fog="0.91 0.925 0.89 1"/></visual>
       <asset><texture type="skybox" builtin="gradient" rgb1="0.96 0.96 0.93" rgb2="0.86 0.89 0.84" width="64" height="64"/>
       <texture name="mt" type="2d" builtin="flat" mark="random" random="0.25" rgb1="0.40 0.50 0.27" markrgb="0.31 0.41 0.22" width="512" height="512"/>
       <material name="moss" texture="mt" texrepeat="6 6" texuniform="true"/>
@@ -373,8 +373,8 @@ def overlay(idx, n, title_n, end_n, end_txt):
     img = Image.new("RGBA", (W, H), (0, 0, 0, 0)); d = ImageDraw.Draw(img)
     if idx < title_n:
         a = min(1, idx / 12, (title_n - idx) / 18)
-        d.text((W / 2, H * 0.17), "Tether in the Glade", font=font("SemiBold", 54), fill=INK + (int(255 * a),), anchor="mm")
-        d.text((W / 2, H * 0.17 + 56), "Concept simulation", font=font("Regular", 26), fill=INK2 + (int(255 * a),), anchor="mm")
+        d.text((64, 70), "Tether in the Glade", font=font("SemiBold", 50), fill=INK + (int(255 * a),), anchor="lm")
+        d.text((66, 122), "Concept simulation", font=font("Regular", 26), fill=INK2 + (int(255 * a),), anchor="lm")
     if idx >= n - end_n:
         a = min(1, (idx - (n - end_n)) / 15)
         d.rectangle((0, H - BAND, W, H), fill=(255, 255, 255, int(236 * a)))
@@ -467,6 +467,7 @@ def main(preview=False):
         mujoco.mj_forward(model, data)
         cam = Cam(az[idx], -14, sm[idx] + (0.10, 0.20, 0.32), 2.4)
         rr.update_scene(data, cam.mj(model))
+        rr.scene.flags[mujoco.mjtRndFlag.mjRND_FOG] = True
         img = Image.fromarray(rr.render()).convert("RGBA")
         img = Image.alpha_composite(img, overlay(idx, len(tl), title_n, end_n, end_txt))
         frame = np.asarray(img.convert("RGB"))

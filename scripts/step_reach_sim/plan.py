@@ -160,17 +160,22 @@ class Planner:
             scored.append((travel, c))
         scored.sort(key=lambda t: t[0])
         best = None
-        for travel, c in scored[:25]:
+        # docked pose cost first (cheap), so a pose that can be held from either end within rated torque
+        # is found even when it is not among the nearest approach poses
+        pre = []
+        for travel, c in scored[:80]:
             down = self.cart_line(stance, Tws, c, pb - LIFT * nb, pb, nb, 14)
             if down is None:
                 continue
+            held = self.M[stance].ratios(self.load(stance, self.frames(stance, down[-1], Tws), down[-1])[0])[0]
+            other = self.M[stance].swing   # the next step may hold on with the other end
+            xo = self.swap(stance, down[-1], Tws, other, dock_to)
+            held = max(held, self.M[other].ratios(Planner.load(self, other, self.frames(other, xo, dock_to), xo)[0])[0])
+            pre.append((0.08 * travel + 4 * max(0.0, held - 1), travel, c, down, held))
+        pre.sort(key=lambda t: t[0])
+        for _, travel, c, down, held in pre[:25]:
             path, worst = self.segment_ok(stance, Tws, xa, c)
             if path is not None:
-                # prefer docking in a pose the stance motors can hold within rated torque
-                held = self.M[stance].ratios(self.load(stance, self.frames(stance, down[-1], Tws), down[-1])[0])[0]
-                other = self.M[stance].swing   # the next step may hold on with the other end
-                xo = self.swap(stance, down[-1], Tws, other, dock_to)
-                held = max(held, self.M[other].ratios(Planner.load(self, other, self.frames(other, xo, dock_to), xo)[0])[0])
                 cost = worst + 0.08 * travel + 4 * max(0.0, held - 1)
                 if best is None or cost < best[0]:
                     best = (cost, path, down)
