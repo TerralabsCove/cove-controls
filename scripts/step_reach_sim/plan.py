@@ -166,7 +166,9 @@ class Planner:
                 continue
             path, worst = self.segment_ok(stance, Tws, xa, c)
             if path is not None:
-                cost = worst + 0.08 * travel
+                # prefer docking in a pose the stance motors can hold within rated torque
+                held = self.M[stance].ratios(self.load(stance, self.frames(stance, down[-1], Tws), down[-1])[0])[0]
+                cost = worst + 0.08 * travel + 4 * max(0.0, held - 1)
                 if best is None or cost < best[0]:
                     best = (cost, path, down)
         if best is None:   # via: arm sticking straight out of the stance surface (end-over-end flip)

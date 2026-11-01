@@ -95,7 +95,7 @@ def plan_scenario(sc, seed=0):
     for x in sols:
         X = P.frames(s, x, Tws)
         if not P.collides(s, X, False):
-            good.append((P.peak_ratio(s, X, x), x))
+            good.append((P.M[s].ratios(P.load(s, X, x)[0])[0], x))   # lowest rated-torque ratio
     if not good:
         raise RuntimeError("no start pose")
     x6 = min(good, key=lambda t: t[0])[1]
