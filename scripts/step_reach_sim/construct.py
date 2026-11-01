@@ -360,7 +360,7 @@ def main(preview=False):
         for n in names:
             pts += list(sub[n] @ X[n][:3, :3].T + X[n][:3, 3])
     pts = pts[::7] + [T[:3, 3] for T in S["docks"]] + [T[:3, 3] + (0, 0, 0.07) for T in S["tower"]]
-    cam = fit(pts, 203, -27, False, margin=40)
+    cam = fit(pts, 68, -30, False, margin=40)
     data = mujoco.MjData(model)
     rr = mujoco.Renderer(model, H, W)
     na = len(names)
