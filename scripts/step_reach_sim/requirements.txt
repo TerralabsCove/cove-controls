@@ -1,7 +1,0 @@
-numpy
-scipy
-trimesh
-python-fcl
-matplotlib
-mujoco
-pillow
