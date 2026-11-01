@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <!-- Generated from Fusion "ArmAssem-copy" (MainArm). Lengths m, mass kg, inertia kg*m^2.
      Zero pose = CAD pose. Joint effort/velocity are PLACEHOLDERS (no limits in the CAD).
-     Masses updated 2026-10-31 (scripts/step_reach_sim/apply_measured_masses.py), total 14.35 kg:
+     Masses updated 2026-10-31 (TerralabsCove/tether_controls sim/step_reach_sim/apply_measured_masses.py), total 14.35 kg:
        DM-J10010 1.485 kg and DM-J4340P 0.375 kg (user manuals; the motor is the plain DM-J10010-2EC
        although the link names say J10010L); LiPo 3200 mAh 0.218 kg and 5000 mAh 0.689 kg (weighed);
        slip ring 10.5 oz with aluminium base plate and pin; gripper: aluminium housing, TPU jaws and fingers,
