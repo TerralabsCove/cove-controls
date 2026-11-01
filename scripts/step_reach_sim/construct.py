@@ -41,6 +41,7 @@ def wrapd(a):
 class CarryPlanner(Planner):
     """Planner whose free gripper may hold a block: carry = dict(th0, th1, yaw0, dyaw)."""
     carry = None
+    next_carry = None   # block the empty gripper is about to pick: counted at the pick pose
 
     def block_pose(self, stance, X, carry=None):
         c = carry or self.carry
@@ -84,9 +85,10 @@ class CarryPlanner(Planner):
 
     def load(self, stance, X, x6):
         t, w = Planner.load(self, stance, X, x6)
-        if self.carry is None:
+        c = self.carry or self.next_carry
+        if c is None:
             return t, w
-        return self.carry_torques(stance, X), w
+        return self.carry_torques(stance, X, c), w
 
     def carry_torques(self, stance, X, carry=None, mass=BLOCK_KG):
         M = self.M[stance]
@@ -175,7 +177,15 @@ def plan(seed=0):
         P.carry = None
         P.boxes = [S["floor"]] + [as_box(T) for T in blocks]
         Tpick = top_dock(blocks[bi])
+        Tgoal = S["tower"][slot]
+        yaw0 = np.arctan2(blocks[bi][1, 0], blocks[bi][0, 0])
+        yaw1 = np.arctan2(Tgoal[1, 0], Tgoal[0, 0])
+        dyaw = (yaw1 - yaw0 + np.pi / 2) % np.pi - np.pi / 2       # a box looks the same turned 180 deg
+        c = dict(th0=np.arctan2(*(blocks[bi][:2, 3] - WORK)[::-1]), th1=np.arctan2(*(Tgoal[:2, 3] - WORK)[::-1]),
+                 yaw0=yaw0, dyaw=dyaw)
+        P.next_carry, P.max_peak = c, None
         lift, swing, down = P.step(stance, Tws, x6, at[EE_B], Tpick, rng)
+        P.next_carry = None
         for ph, seg in (("lift out of dock", lift), ("swing", swing), ("lower into dock", down)):
             for x in seg:
                 snap(ph, k, x)
@@ -184,14 +194,8 @@ def plan(seed=0):
             snap("docked", k, x6)
         print(f"  pick {k}: block {bi}", flush=True); k += 1
         # --- carry it to its tower slot
-        Tgoal = S["tower"][slot]
         Tplace = top_dock(Tgoal)
-        yaw0 = np.arctan2(blocks[bi][1, 0], blocks[bi][0, 0])
-        yaw1 = np.arctan2(Tgoal[1, 0], Tgoal[0, 0])
-        dyaw = (yaw1 - yaw0 + np.pi / 2) % np.pi - np.pi / 2       # a box looks the same turned 180 deg
-        c = dict(th0=np.arctan2(*(blocks[bi][:2, 3] - WORK)[::-1]), th1=np.arctan2(*(Tgoal[:2, 3] - WORK)[::-1]),
-                 yaw0=yaw0, dyaw=dyaw)
-        P.carry = c
+        P.carry, P.max_peak = c, 0.26   # swing within rated torque on every motor while carrying
         P.boxes = [S["floor"]] + [as_box(T) for i, T in enumerate(blocks) if i != bi]
         lift, swing, down = P.step(stance, Tws, x6, Tpick, Tplace, rng)
         for ph, seg in (("lift block", lift), ("carry", swing), ("set down", down)):
@@ -202,7 +206,7 @@ def plan(seed=0):
         x6 = down[-1]; at[EE_B] = Tplace
         blocks[bi] = P.block_pose(stance, P.frames(stance, x6, Tws), c)
         blocks[bi][:3, :3] = Tgoal[:3, :3]; blocks[bi][:3, 3] = Tgoal[:3, 3]
-        P.carry = None
+        P.carry, P.max_peak = None, None
         for _ in range(8):
             snap("docked", k, x6)
         print(f"  place {k}: block {bi} -> slot {slot}, worst rated ratio so far {max(worst):.2f}", flush=True); k += 1
@@ -356,7 +360,7 @@ def main(preview=False):
         for n in names:
             pts += list(sub[n] @ X[n][:3, :3].T + X[n][:3, 3])
     pts = pts[::7] + [T[:3, 3] for T in S["docks"]] + [T[:3, 3] + (0, 0, 0.07) for T in S["tower"]]
-    cam = fit(pts, -62, -24, False, margin=40)
+    cam = fit(pts, 203, -27, False, margin=40)
     data = mujoco.MjData(model)
     rr = mujoco.Renderer(model, H, W)
     na = len(names)
