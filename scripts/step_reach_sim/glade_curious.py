@@ -46,7 +46,7 @@ def dockT(name):
 
 
 def scene():
-    floor = floor_box(-2.6, 3.4, -1.8, 2.2)
+    floor = floor_box(-8.0, 8.0, -8.0, 8.0)
     mesh, objs = trunk(tuple(TREE))
     v = mesh.vertices
     tree = Multi(objs, (v.min(0), v.max(0)))
@@ -221,7 +221,9 @@ ACTIONS = [
 def plan(seed=0):
     """Runs ACTIONS in order, checkpointing after each; a failed action is retried with a fresh rng."""
     R = Run(seed)
-    save = lambda st: pickle.dump(dict(stage=st, **{a: getattr(R, a) for a in STATE}), open(CKPT, "wb"))
+    def save(st):
+        d = dict(stage=st, **{a: getattr(R, a) for a in STATE})
+        pickle.dump(d, open(CKPT, "wb")); pickle.dump(d, open(CKPT.replace(".pkl", f"_{st:02d}.pkl"), "wb"))
 
     def restore():
         ck = pickle.load(open(CKPT, "rb"))
@@ -285,8 +287,8 @@ def build_glade(P, S, tmp):
     # ground: moss
     b = S["floor"]
     g(f'<geom type="box" size="{" ".join(map(str, b.size / 2))}" pos="{" ".join(map(str, b.c))}" material="moss" contype="0" conaffinity="0"/>')
-    for _ in range(46):   # moss patches
-        x, y = rng.uniform(-2.4, 3.2), rng.uniform(-1.6, 2.0)
+    for _ in range(120):   # moss patches
+        x, y = rng.uniform(-5.0, 6.0), rng.uniform(-3.0, 6.0)
         r1, r2 = rng.uniform(0.15, 0.45), rng.uniform(0.12, 0.35)
         c = rng.choice(["0.36 0.46 0.25 1", "0.42 0.52 0.28 1", "0.33 0.42 0.24 1", "0.47 0.55 0.32 1"])
         g(f'<geom type="ellipsoid" size="{r1:.3f} {r2:.3f} 0.006" pos="{x:.3f} {y:.3f} 0.0" quat="{q2s(quat_yaw(rng.uniform(0, 3.14)))}" rgba="{c}" contype="0" conaffinity="0"/>')
@@ -436,7 +438,7 @@ def main(preview=False):
     mids = np.array(mids)
     ker = np.ones(151) / 151
     sm = np.stack([np.convolve(np.pad(mids[:, i], 75, mode="edge"), ker, mode="valid") for i in range(3)], 1)
-    az = np.linspace(68, 96, len(tl))
+    az = np.linspace(50, 76, len(tl))
     data = mujoco.MjData(model)
     rr = mujoco.Renderer(model, H, W)
     na = len(names)
@@ -463,7 +465,7 @@ def main(preview=False):
             qq = np.zeros(4); mujoco.mju_mat2Quat(qq, np.ascontiguousarray(T[:3, :3]).flatten())
             data.mocap_pos[na + i] = T[:3, 3]; data.mocap_quat[na + i] = qq
         mujoco.mj_forward(model, data)
-        cam = Cam(az[idx], -16, sm[idx] + (0.15, 0.25, 0.30), 3.0)
+        cam = Cam(az[idx], -14, sm[idx] + (0.10, 0.20, 0.32), 2.4)
         rr.update_scene(data, cam.mj(model))
         img = Image.fromarray(rr.render()).convert("RGBA")
         img = Image.alpha_composite(img, overlay(idx, len(tl), title_n, end_n, end_txt))

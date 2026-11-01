@@ -168,6 +168,9 @@ class Planner:
             if path is not None:
                 # prefer docking in a pose the stance motors can hold within rated torque
                 held = self.M[stance].ratios(self.load(stance, self.frames(stance, down[-1], Tws), down[-1])[0])[0]
+                other = self.M[stance].swing   # the next step may hold on with the other end
+                xo = self.swap(stance, down[-1], Tws, other, dock_to)
+                held = max(held, self.M[other].ratios(Planner.load(self, other, self.frames(other, xo, dock_to), xo)[0])[0])
                 cost = worst + 0.08 * travel + 4 * max(0.0, held - 1)
                 if best is None or cost < best[0]:
                     best = (cost, path, down)

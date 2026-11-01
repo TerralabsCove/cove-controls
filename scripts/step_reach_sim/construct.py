@@ -90,6 +90,10 @@ class CarryPlanner(Planner):
             return t, w
         return self.carry_torques(stance, X, c), w
 
+    def peak_ratio(self, stance, X, x6):
+        t = self.carry_torques(stance, X) if self.carry is not None else Planner.load(self, stance, X, x6)[0]
+        return self.M[stance].ratios(t)[1]
+
     def carry_torques(self, stance, X, carry=None, mass=None):
         c = carry or self.carry
         mass = c.get("mass", BLOCK_KG) if mass is None else mass
